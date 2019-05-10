@@ -53,14 +53,14 @@ def solve_problems(problems, T, mode='dfs', gas=np.inf):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('problemfile', type=str)
+    parser.add_argument('--problemfile', type=str, default='../../dataset/T=2_basic_test.json')
     parser.add_argument('--predictor', type=str)
     parser.add_argument('--outfile', type=str)
-    parser.add_argument('--T', type=int)
+    parser.add_argument('--T', type=int, default=2)
     parser.add_argument('--mode', type=str, 
         choices=['dfs', 'sort-and-add'],
         default='dfs')
-    parser.add_argument('--gas', type=int, default=np.inf)
+    parser.add_argument('--gas', type=int, default=1000)
     args = parser.parse_args()
 
     problems = json.loads(open(args.problemfile).read())
@@ -76,6 +76,8 @@ def main():
             problem['prediction'] = pred
 
     rows = solve_problems(problems, args.T, args.mode, args.gas)
+
+    print(rows)
 
     df = pd.DataFrame(rows)
     nb_solved = len(df) - sum(df.solution.isnull())

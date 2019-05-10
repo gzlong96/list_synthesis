@@ -5,9 +5,9 @@ from deepcoder.nn.model import get_model, get_XY
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--infile', type=str)
-    parser.add_argument('--outfile', type=str)
-    parser.add_argument('--epochs', type=int)
+    parser.add_argument('--infile', type=str, default='../../dataset/T=2_basic_test.json')
+    parser.add_argument('--outfile', type=str, default='../../model.h5')
+    parser.add_argument('--epochs', type=int, default=100)
     parser.add_argument('--val_split', type=float)
     parser.add_argument('-E', type=int, 
         default=2, help='embedding dimension')
