@@ -11,9 +11,10 @@ import tqdm
 from deepcoder import context
 from deepcoder import search
 from deepcoder import util
-from deepcoder.nn import model
+from deepcoder.nn import deepcoder_tf
 from deepcoder.dsl import impl
 from deepcoder.dsl.program import Program
+
 
 def solve_problem(problem, T, mode='dfs', gas=np.inf):
     examples = [util.decode_example(x) for x in problem['examples']]
@@ -51,33 +52,33 @@ def solve_problems(problems, T, mode='dfs', gas=np.inf):
     pbar.close()
     return rows
 
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--problemfile', type=str, default='../../dataset/T=2_basic_test.json')
+    parser.add_argument('--problemfile', type=str, default='../../dataset/T=2_basic_test_1.json')
     parser.add_argument('--predictor', type=str)
     parser.add_argument('--outfile', type=str)
     parser.add_argument('--T', type=int, default=2)
     parser.add_argument('--mode', type=str, 
         choices=['dfs', 'sort-and-add'],
         default='dfs')
-    parser.add_argument('--gas', type=int, default=1000)
+    parser.add_argument('--gas', type=int, default=1500)
+    parser.add_argument('-E', type=int, default=2, help='embedding dimension')
+    parser.add_argument('--nb_inputs', type=int, default=3)
     args = parser.parse_args()
 
     problems = json.loads(open(args.problemfile).read())
 
     if args.predictor:
         # annotate problems with predictions
-        import keras
-        predictor = keras.models.load_model(args.predictor)
-        max_nb_inputs = model.get_max_nb_inputs(predictor)
-        X, _ = model.get_XY(problems, max_nb_inputs)
-        predictions = predictor.predict(X)
+        predictor = deepcoder_tf.Deepcoder(args.nb_inputs, args.E)
+        predictor.load()
+        rows_type, rows_val, y = deepcoder_tf.get_XY(problems, args.nb_inputs)
+        predictions = predictor.predict(rows_type, rows_val)
         for problem, pred in zip(problems, predictions):
             problem['prediction'] = pred
 
     rows = solve_problems(problems, args.T, args.mode, args.gas)
-
-    print(rows)
 
     df = pd.DataFrame(rows)
     nb_solved = len(df) - sum(df.solution.isnull())
@@ -87,6 +88,7 @@ def main():
     if args.outfile:
         print('saving results to', args.outfile)
         df.to_hdf(args.outfile, 'data')
-   
+
+
 if __name__ == '__main__':
     main()
