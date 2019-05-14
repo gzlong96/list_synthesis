@@ -4,6 +4,19 @@ import sys
 from deepcoder.dsl.value import Value
 from deepcoder.dsl import impl
 
+# def get_max_token_len(problems):
+#     max_l = 0
+#     for p in problems:
+#         if len(p['program'].split('|')) > max_l:
+#             max_l = len(p['program'].split('|'))
+#     return max_l
+
+def get_max_token_len(filename):
+    for i in range(5):
+        if str(i) in filename:
+            max_l = 4*i
+            return max_l
+
 def get_attribute_vec(program):
     # attributes
     y = [0] * len(impl.FUNCTIONS)
@@ -12,6 +25,27 @@ def get_attribute_vec(program):
             if x in impl.FUNCTIONS:
                 y[impl.FUNCTIONS.index(x)] = 1
     return y
+
+def get_program_vec(prefix):
+    # prefix to index
+    splited = prefix.split('|')
+    input_type = []
+    functions = []
+    for statement in splited:
+        if statement=='LIST' or statement=='INT':
+            input_type.append(statement)
+        else:
+            splited_stmt = statement.split(',')
+            f = impl.NAME2FUNC[splited_stmt[0]]
+            functions.append(impl.FUNCTIONS.index(f))
+            for arg in splited_stmt[1:]:
+                if arg in impl.NAME2FUNC.keys():
+                    functions.append(impl.FUNCTIONS.index(impl.NAME2FUNC[arg]))
+                else:
+                    functions.append(len(impl.FUNCTIONS)+int(arg))
+
+    # return input_type, functions
+    return functions
 
 def decode_example(example):
     """ Expected format:

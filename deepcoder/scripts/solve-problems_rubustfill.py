@@ -11,7 +11,7 @@ import tqdm
 from deepcoder import context
 from deepcoder import search
 from deepcoder import util
-from deepcoder.nn import deepcoder_tf
+from deepcoder.nn import rubustfill
 from deepcoder.dsl import impl
 from deepcoder.dsl.program import Program
 
@@ -71,9 +71,10 @@ def main():
 
     if args.predictor:
         # annotate problems with predictions
-        predictor = deepcoder_tf.Deepcoder(args.nb_inputs, args.E)
+        max_token_length = util.get_max_token_len(args.problemfile)
+        predictor = rubustfill.Rubustfill(args.nb_inputs, args.E, max_token_length)
         predictor.load()
-        rows_type, rows_val, y = deepcoder_tf.get_XY(problems, args.nb_inputs)
+        rows_type, rows_val, y = rubustfill.get_XY(problems, args.nb_inputs, max_token_length)
         predictions = predictor.predict(rows_type, rows_val)
         for problem, pred in zip(problems, predictions):
             problem['prediction'] = pred

@@ -1,8 +1,8 @@
 import collections
 import json
 import numpy as np
-import random
 import re
+import random
 
 from deepcoder.dsl import impl
 from deepcoder.dsl import constants
@@ -31,6 +31,11 @@ def encode(value, L=L):
         vals = [constants.NULL - constants.INTMAX] * L
     return np.array(typ), np.array(vals)
 
+def encode_program(f, max_nb_tokens):
+    for i in range(len(f), max_nb_tokens):
+        f.append(len(impl.FUNCTIONS)+5)
+    return f
+
 def get_row(examples, max_nb_inputs, L=L):
     row_type = np.zeros((len(examples), max_nb_inputs+1, 2))
     row_val = np.zeros((len(examples), max_nb_inputs+1, L))
@@ -53,7 +58,7 @@ def get_row(examples, max_nb_inputs, L=L):
     return row_type, row_val
 
 
-def get_XY(problems, max_nb_inputs):
+def get_XY(problems, max_nb_inputs, max_nb_tokens):
     y = []
     rows_type = []
     rows_val = []
@@ -63,7 +68,8 @@ def get_XY(problems, max_nb_inputs):
         # print(examples[0])
         row_type, row_val = get_row(examples, max_nb_inputs, L)
         # print(row)
-        y.append(problem['attribute'])
+        f_list = util.get_program_vec(problem['program'])
+        y.append(encode_program(f_list, max_nb_tokens))
         rows_type.append(row_type)
         rows_val.append(row_val)
 
@@ -78,10 +84,11 @@ def get_XY(problems, max_nb_inputs):
     return rows_type, rows_val, y
 
 
-class Deepcoder:
-    def __init__(self, I, E, K=256, lr=1e-3, batch_size=-1):
+class Rubustfill:
+    def __init__(self, I, E, L2, K=256, lr=1e-3, batch_size=-1):
         self.I = I
         self.E = E
+        self.L2 = L2 # max length of tokens
         self.dim = K
 
         self.lr = lr
@@ -106,26 +113,33 @@ class Deepcoder:
         """
         self.type_ph = tf.placeholder(tf.float32, [None, M, I + 1, 2], name='type')
         self.val_ph = tf.placeholder(tf.int32, [None, M, I + 1, L], name='value')
-        self.label_ph = tf.placeholder(tf.float32, [None, len(impl.FUNCTIONS)], name='labels')
+        self.label_ph = tf.placeholder(tf.int32, [None, self.L2], name='labels')
 
         number_embeddings = tf.get_variable('number_embeddings', [constants.NULL + 1, self.E])
         embedded_vals = tf.nn.embedding_lookup(number_embeddings, self.val_ph)
 
-        reshaped_vals = tf.reshape(embedded_vals, [-1, M, I + 1, L * E])
+        reshaped_vals = tf.reshape(embedded_vals, [-1, (I + 1) * L, E]) # [b*M, (I + 1) * L, E]
 
-        concated = tf.concat([self.type_ph, reshaped_vals], axis=-1)
+        with tf.name_scope('io_rnn'):
+            io_cell = tf.nn.rnn_cell.LSTMCell(self.dim, name='cell1')
 
-        flattened = tf.reshape(concated, [-1, M, (I + 1) * (L * E + 2)])
-        x1 = tf.layers.dense(flattened, self.dim, activation=tf.nn.sigmoid)
-        x2 = tf.layers.dense(x1, self.dim, activation=tf.nn.sigmoid)
-        x3 = tf.layers.dense(x2, self.dim, activation=tf.nn.sigmoid)
+            x, h = tf.nn.dynamic_rnn(io_cell, reshaped_vals, dtype=tf.float32)
 
-        ave = tf.reduce_mean(x3, axis=1)
-        pred = tf.layers.dense(ave, len(impl.FUNCTIONS), activation=None)
-        self.pred = tf.nn.sigmoid(pred)
+        with tf.name_scope('program_rnn'):
+            program_cell = tf.nn.rnn_cell.LSTMCell(self.dim, name='cell2')
+
+            x_p, h_p = tf.nn.dynamic_rnn(program_cell, tf.tile(x[:,-1:,:],[1,self.L2,1]), dtype=tf.float32) # x_p [b*M, L2, dim]
+
+        x1 = tf.layers.dense(x_p, len(impl.FUNCTIONS) + 6, activation=None)
+        x2 = tf.reshape(x1, [-1, M, self.L2, len(impl.FUNCTIONS) + 6])
+        pooled = tf.layers.max_pooling2d(x2, [M, 1], [1,1])
+
+        pred = tf.reshape(pooled, [-1, self.L2, len(impl.FUNCTIONS) + 6])
+
+        self.pred = tf.nn.softmax(pred, axis=-1)
 
         with tf.name_scope('train_loss'):
-            self.loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=self.label_ph, logits=pred))
+            self.loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(labels=self.label_ph, logits=pred))
 
             tf.summary.scalar('loss', self.loss)
 
@@ -156,13 +170,12 @@ class Deepcoder:
                 self.writer.add_summary(summary, i)
                 print('loss:', loss)
 
-    def save(self, outfile="../models/deepcoder/deepcoder.ckpt"):
+    def save(self, outfile="../models/rubustfill/model.ckpt"):
         self.saver.save(self.sess, outfile)
 
-    def load(self, outfile="../models/deepcoder/"):
-        ckpt = tf.train.get_checkpoint_state(outfile)
+    def load(self, outfile="models/deepcoder.ckpt"):
+        ckpt = tf.train.get_checkpoint_state("../models/rubustfill/")
         if ckpt and ckpt.model_checkpoint_path:
-            print('load successfully')
             self.saver.restore(self.sess, ckpt.model_checkpoint_path)
 
     def predict(self, rows_type, rows_val):

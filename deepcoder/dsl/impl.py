@@ -103,3 +103,7 @@ FUNCTIONS = [
 ] + LAMBDAS
 
 NAME2FUNC = {x.name : x for x in FUNCTIONS}
+
+
+# print(ZIPWITH.input_type)
+# print(LTIMES.input_type)
