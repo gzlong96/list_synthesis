@@ -105,13 +105,13 @@ FUNCTIONS = [
 
 NAME2FUNC = {x.name : x for x in FUNCTIONS}
 
-INPUT_TYPE2MASK = {'F(INT, INT)': np.array([0 for _ in range(16)] + [1 for _ in range(10)] + [0 for _ in range(17)]),
-                   'F(INT, BOOL)': np.array([0 for _ in range(26)] + [1 for _ in range(4)] + [0 for _ in range(13)]),
-                   'F((INT, INT), INT)': np.array([0 for _ in range(30)] + [1 for _ in range(5)] + [0 for _ in range(8)])}
+INPUT_TYPE2MASK = {'F(INT, INT)': np.array([0 for a in range(15)] + [1 for b in range(10)] + [0 for c in range(17)]),
+                   'F(INT, BOOL)': np.array([0 for d in range(25)] + [1 for e in range(4)] + [0 for f in range(13)]),
+                   'F((INT, INT), INT)': np.array([0 for g in range(29)] + [1 for h in range(5)] + [0 for i in range(8)])}
 
 
 FUNCTION_MASK = np.zeros((len(FUNCTIONS)+8))
-FUNCTION_MASK[:len(FUNCTIONS)] = 1
+FUNCTION_MASK[:15] = 1
 
 LAMBDA_MASK = np.zeros((len(FUNCTIONS)+8))
 LAMBDA_MASK[(len(FUNCTIONS)-len(LAMBDAS)):len(FUNCTIONS)] = 1

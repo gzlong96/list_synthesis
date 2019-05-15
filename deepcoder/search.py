@@ -345,9 +345,15 @@ def beam_search(examples, T, predictions, gas):
                         products = choince_list
 
                     for args in products:
+                        if isinstance(next_f.input_type, tuple):
+                            expected_len_args = len(next_f.input_type)
+                        else:
+                            expected_len_args = 1
+                        if len(args) != expected_len_args:
+                            break
                         stmt = (next_f, args)
                         program = Program(self.p_base.input_types, list(self.p_base.stmts) + [stmt])
-                        print(self.p_base, program)
+                        # print(self.p_base, program)
                         new_helper_list.append(Beamhelper(program, self.t + 1, self.pointer+len(args)))
             return new_helper_list
 
@@ -390,7 +396,7 @@ def beam_search(examples, T, predictions, gas):
     helper_base = Beamhelper(p_base, 0, 0)
     helpers = [helper_base]
     for i in range(T):
-        print('i:',i)
+        # print('i:',i)
         new_helpers = []
         for h in helpers:
             new_helpers += h.next_step()
@@ -401,7 +407,7 @@ def beam_search(examples, T, predictions, gas):
         # print(new_helpers[1].p_base, new_helpers[1].p)
         helpers = new_helpers[:nb_beam]
         for h in helpers:
-            print(h.p_base)
+            # print(h.p_base)
             if h.check():
                 break
 
