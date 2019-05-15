@@ -14,7 +14,7 @@ from deepcoder.dsl import impl
 def get_max_token_len(filename):
     for i in range(5):
         if str(i) in filename:
-            max_l = 4*i
+            max_l = 5*i
             return max_l
 
 def get_attribute_vec(program):

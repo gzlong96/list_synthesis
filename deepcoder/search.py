@@ -302,6 +302,9 @@ def beam_search(examples, T, predictions, gas):
 
     # init
     input_types = [x.type for x in examples[0][0]]
+    # print(examples[0])
+    # print(input_types)
+    # print(predictions[0][:10])
     input_type_to_inputs = collections.defaultdict(list)
     for i, input_type in enumerate(input_types):
         input_type_to_inputs[input_type].append(i)
@@ -327,7 +330,7 @@ def beam_search(examples, T, predictions, gas):
                 if impl.FUNCTION_MASK[i]:
                     next_f = impl.FUNCTIONS[i]
                     next_input_types = next_f.input_type
-                    print(next_f, next_input_types)
+                    # print(next_f, next_input_types)
                     choince_list = []
                     if isinstance(next_input_types, tuple):
                         for next_input_type in next_input_types:
@@ -343,7 +346,8 @@ def beam_search(examples, T, predictions, gas):
 
                     for args in products:
                         stmt = (next_f, args)
-                        program = Program(p_base.input_types, list(p_base.stmts) + [stmt])
+                        program = Program(self.p_base.input_types, list(self.p_base.stmts) + [stmt])
+                        print(self.p_base, program)
                         new_helper_list.append(Beamhelper(program, self.t + 1, self.pointer+len(args)))
             return new_helper_list
 
@@ -351,8 +355,8 @@ def beam_search(examples, T, predictions, gas):
             ns['nb_steps'] += 1
             ns['gas'] -= 1
             try:
-                if is_solution(p_base, examples):
-                    ns['solution'] = p_base
+                if is_solution(self.p_base, examples):
+                    ns['solution'] = self.p_base
                     return True
             except (NullInputError, OutputOutOfRangeError):
                 # throw out programs that have null inputs or any out of range output
@@ -386,14 +390,18 @@ def beam_search(examples, T, predictions, gas):
     helper_base = Beamhelper(p_base, 0, 0)
     helpers = [helper_base]
     for i in range(T):
+        print('i:',i)
         new_helpers = []
         for h in helpers:
             new_helpers += h.next_step()
         for h in new_helpers:
             h.calculate_p()
         sorted(new_helpers, reverse=True)
+        # print(new_helpers[0].p_base, new_helpers[0].p)
+        # print(new_helpers[1].p_base, new_helpers[1].p)
         helpers = new_helpers[:nb_beam]
         for h in helpers:
+            print(h.p_base)
             if h.check():
                 break
 
