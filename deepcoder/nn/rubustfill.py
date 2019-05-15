@@ -33,7 +33,7 @@ def encode(value, L=L):
 
 def encode_program(f, max_nb_tokens):
     for i in range(len(f), max_nb_tokens):
-        f.append(len(impl.FUNCTIONS)+5)
+        f.append(len(impl.FUNCTIONS)+7)
     return f
 
 def get_row(examples, max_nb_inputs, L=L):
@@ -130,11 +130,11 @@ class Rubustfill:
 
             x_p, h_p = tf.nn.dynamic_rnn(program_cell, tf.tile(x[:,-1:,:],[1,self.L2,1]), dtype=tf.float32) # x_p [b*M, L2, dim]
 
-        x1 = tf.layers.dense(x_p, len(impl.FUNCTIONS) + 6, activation=None)
-        x2 = tf.reshape(x1, [-1, M, self.L2, len(impl.FUNCTIONS) + 6])
+        x1 = tf.layers.dense(x_p, len(impl.FUNCTIONS) + 8, activation=None)
+        x2 = tf.reshape(x1, [-1, M, self.L2, len(impl.FUNCTIONS) + 8])
         pooled = tf.layers.max_pooling2d(x2, [M, 1], [1,1])
 
-        pred = tf.reshape(pooled, [-1, self.L2, len(impl.FUNCTIONS) + 6])
+        pred = tf.reshape(pooled, [-1, self.L2, len(impl.FUNCTIONS) + 8])
 
         self.pred = tf.nn.softmax(pred, axis=-1)
 
@@ -159,9 +159,10 @@ class Rubustfill:
                 print('loss:', loss)
             else:
                 print('start epochs', i)
-                zipped = zip([rows_type, rows_val, y])
-                random.shuffle(zipped)
-                rows_type, rows_val, y = zipped
+                # zipped = zip(rows_type, rows_val, y)
+                # print(*zipped)
+                # random.shuffle(zipped)
+                # rows_type, rows_val, y = zipped
                 for j in range(0, len(y), self.batch_size):
                     _, summary, loss = self.sess.run([self.train_op, self.merged, self.loss],
                                                      feed_dict={self.type_ph: rows_type[j:j+self.batch_size],

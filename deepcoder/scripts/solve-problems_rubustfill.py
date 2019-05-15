@@ -18,17 +18,12 @@ from deepcoder.dsl.program import Program
 
 def solve_problem(problem, T, mode='dfs', gas=np.inf):
     examples = [util.decode_example(x) for x in problem['examples']]
-    predictions = problem.get('prediction', np.zeros(len(impl.FUNCTIONS)))
-    scores = dict(zip(impl.FUNCTIONS, predictions))
-    ctx = context.Context(scores)
+    predictions = problem.get('prediction') # (L2, len(f)+8)
     start = time.time()
-    if mode == 'dfs':
-        search_func = search.dfs
-    elif mode == 'sort-and-add':
-        search_func = search.sort_and_add
-    else:
-        raise ValueError('invalid search mode {}'.format(mode))
-    solution, steps_used = search_func(examples, T, ctx, gas)
+
+    search_func = search.beam_search
+
+    solution, steps_used = search_func(examples, T, predictions, gas)
     end = time.time()
     if solution:
         solution = solution.prefix

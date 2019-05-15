@@ -12,7 +12,7 @@ import tqdm
 
 from deepcoder import context
 from deepcoder.dsl.value import IntValue, NULLVALUE
-from deepcoder.dsl import types
+from deepcoder.dsl import types, impl
 from deepcoder.dsl.function import OutputOutOfRangeError, NullInputError
 from deepcoder.dsl.program import Program, get_unused_indices
 
@@ -292,3 +292,111 @@ def sort_and_add(examples, T, final_ctx, gas=np.inf):
         if solution:
             break
     return solution, nb_steps_list
+
+def beam_search(examples, T, predictions, gas):
+    ns = {'nb_steps': 0,
+          'solution': None,
+          'gas': gas}
+
+    nb_beam = gas/T
+
+    # init
+    input_types = [x.type for x in examples[0][0]]
+    input_type_to_inputs = collections.defaultdict(list)
+    for i, input_type in enumerate(input_types):
+        input_type_to_inputs[input_type].append(i)
+    p_base = Program(input_types, tuple())
+
+    class Beamhelper:
+        def __init__(self,p_base, t, pointer):
+            self.p_base = p_base
+            self.t = t
+            self.pointer = pointer
+            self.p = self.calculate_p()
+
+            self.TYPE_MASK = {}
+            self.TYPE_MASK[types.INT] = np.zeros_like(predictions[0])
+            self.TYPE_MASK[types.LIST] = np.zeros_like(predictions[0])
+            self.TYPE_MASK[types.BOOL] = np.zeros_like(predictions[0])
+            for i in range(len(p_base.types)):
+                self.TYPE_MASK[p_base.types[i]][i+len(impl.FUNCTIONS)] = 1
+
+        def next_step(self):
+            new_helper_list = []
+            for i in range(len(predictions[0])):
+                if impl.FUNCTION_MASK[i]:
+                    next_f = impl.FUNCTIONS[i]
+                    next_input_types = next_f.input_type
+                    choince_list = []
+                    if isinstance(next_input_types, tuple):
+                        for next_input_type in next_input_types:
+                            if next_input_type in self.TYPE_MASK.keys():
+                                choince_list.append(
+                                    itertools.compress(impl.ACT_SPACE,
+                                                       impl.INPUT_TYPE2MASK[next_input_type]+self.TYPE_MASK[next_input_type]))
+                            else:
+                                choince_list.append(itertools.compress(impl.ACT_SPACE, impl.INPUT_TYPE2MASK[next_input_type]))
+                        products = itertools.product(*choince_list)
+                    else:
+                        choince_list.append(itertools.compress(impl.ACT_SPACE, impl.INPUT_TYPE2MASK[next_input_types]))
+                        products = choince_list
+
+                    for args in products:
+                        stmt = (next_f, args)
+                        program = Program(p_base.input_types, list(p_base.stmts) + [stmt])
+                        new_helper_list.append(Beamhelper(program, self.t + 1, self.pointer+len(args)))
+            return new_helper_list
+
+        def check(self):
+            ns['nb_steps'] += 1
+            ns['gas'] -= 1
+            try:
+                if is_solution(p_base, examples):
+                    ns['solution'] = p_base
+                    return True
+            except (NullInputError, OutputOutOfRangeError):
+                # throw out programs that have null inputs or any out of range output
+                # null outputs ok if unused
+                return
+
+            if ns['gas'] <= 0:
+                return True
+
+            if self.t == T:
+                return
+
+        def calculate_p(self):
+            p = 1.0
+            count = 0
+            for func, args in self.p_base.stmts:
+                p_f = predictions[count][impl.TOKEN2INDEX[func]]
+                count += 1
+                for arg in args:
+                    p_f *= predictions[count][impl.TOKEN2INDEX[arg]]
+                p *= p_f**(1.0/len(args+1))
+            self.p = p
+            return p
+
+        def __cmp__(self, other):
+            if self.p < other.p:
+                return -1
+            elif self.p > other.p:
+                return 1
+            else:
+                return 0
+
+    helper_base = Beamhelper(p_base, 0, 0)
+    helpers = [helper_base]
+    for i in range(T):
+        new_helpers = []
+        for h in helpers:
+            new_helpers += h.next_step()
+        for h in new_helpers:
+            h.calculate_p()
+        sorted(new_helpers, reverse=True)
+        helpers = new_helpers[:nb_beam]
+        for h in helpers:
+            if h.check():
+                break
+
+    return ns['solution'], ns['nb_steps']

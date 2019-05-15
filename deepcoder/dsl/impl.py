@@ -1,4 +1,5 @@
 import collections
+import numpy as np
 
 from deepcoder.dsl.function import Function
 from deepcoder.dsl.types import INT, BOOL, LIST, FunctionType
@@ -104,6 +105,23 @@ FUNCTIONS = [
 
 NAME2FUNC = {x.name : x for x in FUNCTIONS}
 
+INPUT_TYPE2MASK = {}
+for i in range(len(FUNCTIONS)):
+    f = FUNCTIONS[i]
+    if f.input_type not in INPUT_TYPE2MASK.keys():
+        INPUT_TYPE2MASK[f.input_type] = np.zeros((len(FUNCTIONS)+8))
+    INPUT_TYPE2MASK[f.input_type][i] = 1
+
+FUNCTION_MASK = np.zeros((len(FUNCTIONS)+8))
+FUNCTION_MASK[:len(FUNCTIONS)] = 1
+
+LAMBDA_MASK = np.zeros((len(FUNCTIONS)+8))
+LAMBDA_MASK[(len(FUNCTIONS)-len(LAMBDAS)):len(FUNCTIONS)] = 1
+
+ACT_SPACE = FUNCTIONS + [0, 1, 2, 3, 4, 5, 6, 7]
+TOKEN2INDEX = {x:ACT_SPACE.index(x) for x in ACT_SPACE}
+
+# print(INPUT_TYPE2MASK)
 
 # print(ZIPWITH.input_type)
 # print(LTIMES.input_type)

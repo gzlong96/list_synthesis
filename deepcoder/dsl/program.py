@@ -58,6 +58,7 @@ class Program(object):
         self.input_types = tuple(input_types)
         self.stmts = tuple(stmts)
         self.types = tuple(list(self.input_types) + [f.type.output_type for f, _ in self.stmts])
+        self.output_types = tuple([f.type.output_type for f, _ in self.stmts])
         self.prefix = self.toprefix()
         self._hash = hash(self.prefix)
 
@@ -67,6 +68,13 @@ class Program(object):
             for arg in args:
                 if isinstance(arg, Function):
                     yield arg
+
+    def tokens(self):
+        tokens = []
+        for func, args in self.stmts:
+            tokens.append(func)
+            for arg in args:
+                tokens.append(arg)
 
     def toprefix(self):
         toks = [x.name for x in self.input_types]
