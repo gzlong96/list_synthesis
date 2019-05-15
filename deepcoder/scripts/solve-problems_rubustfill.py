@@ -29,21 +29,40 @@ def solve_problem(problem, T, mode='dfs', gas=np.inf):
         solution = solution.prefix
     return solution, end - start, steps_used
 
+# def solve_problems(problems, T, mode='dfs', gas=np.inf):
+#     rows = []
+#     pbar = tqdm.tqdm(total=len(problems))
+#     with concurrent.futures.ProcessPoolExecutor() as executor:
+#         futs = [executor.submit(solve_problem, problem, T, mode, gas)
+#                 for problem in problems]
+#         for fut, problem in zip(futs, problems):
+#             solution, walltime, steps_used = fut.result()
+#             rows.append(collections.OrderedDict([
+#                 ('nb_steps', steps_used),
+#                 ('wall_ms', walltime * 1000),
+#                 ('solution', solution),
+#                 ('reference', problem['program']),
+#             ]))
+#             pbar.update(1)
+#     pbar.close()
+#     return rows
+
 def solve_problems(problems, T, mode='dfs', gas=np.inf):
     rows = []
     pbar = tqdm.tqdm(total=len(problems))
-    with concurrent.futures.ProcessPoolExecutor() as executor:
-        futs = [executor.submit(solve_problem, problem, T, mode, gas) 
-                for problem in problems]
-        for fut, problem in zip(futs, problems):
-            solution, walltime, steps_used = fut.result()
-            rows.append(collections.OrderedDict([
-                ('nb_steps', steps_used),
-                ('wall_ms', walltime * 1000),
-                ('solution', solution),
-                ('reference', problem['program']),
-            ]))
-            pbar.update(1)
+    futs = []
+    for problem in problems:
+        a,b,c = solve_problem(problem, T, mode, gas)
+        futs.append([a,b,c])
+    for fut, problem in zip(futs, problems):
+        solution, walltime, steps_used = fut
+        rows.append(collections.OrderedDict([
+            ('nb_steps', steps_used),
+            ('wall_ms', walltime * 1000),
+            ('solution', solution),
+            ('reference', problem['program']),
+        ]))
+        pbar.update(1)
     pbar.close()
     return rows
 

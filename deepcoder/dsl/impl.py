@@ -105,12 +105,10 @@ FUNCTIONS = [
 
 NAME2FUNC = {x.name : x for x in FUNCTIONS}
 
-INPUT_TYPE2MASK = {}
-for i in range(len(FUNCTIONS)):
-    f = FUNCTIONS[i]
-    if f.input_type not in INPUT_TYPE2MASK.keys():
-        INPUT_TYPE2MASK[f.input_type] = np.zeros((len(FUNCTIONS)+8))
-    INPUT_TYPE2MASK[f.input_type][i] = 1
+INPUT_TYPE2MASK = {'F(INT, INT)': np.array([0 for _ in range(16)] + [1 for _ in range(10)] + [0 for _ in range(17)]),
+                   'F(INT, BOOL)': np.array([0 for _ in range(26)] + [1 for _ in range(4)] + [0 for _ in range(13)]),
+                   'F((INT, INT), INT)': np.array([0 for _ in range(30)] + [1 for _ in range(5)] + [0 for _ in range(8)])}
+
 
 FUNCTION_MASK = np.zeros((len(FUNCTIONS)+8))
 FUNCTION_MASK[:len(FUNCTIONS)] = 1

@@ -298,7 +298,7 @@ def beam_search(examples, T, predictions, gas):
           'solution': None,
           'gas': gas}
 
-    nb_beam = gas/T
+    nb_beam = int(gas/T)
 
     # init
     input_types = [x.type for x in examples[0][0]]
@@ -315,9 +315,9 @@ def beam_search(examples, T, predictions, gas):
             self.p = self.calculate_p()
 
             self.TYPE_MASK = {}
-            self.TYPE_MASK[types.INT] = np.zeros_like(predictions[0])
-            self.TYPE_MASK[types.LIST] = np.zeros_like(predictions[0])
-            self.TYPE_MASK[types.BOOL] = np.zeros_like(predictions[0])
+            self.TYPE_MASK['INT'] = np.zeros_like(predictions[0])
+            self.TYPE_MASK['LIST'] = np.zeros_like(predictions[0])
+            self.TYPE_MASK['BOOL'] = np.zeros_like(predictions[0])
             for i in range(len(p_base.types)):
                 self.TYPE_MASK[p_base.types[i]][i+len(impl.FUNCTIONS)] = 1
 
@@ -327,18 +327,18 @@ def beam_search(examples, T, predictions, gas):
                 if impl.FUNCTION_MASK[i]:
                     next_f = impl.FUNCTIONS[i]
                     next_input_types = next_f.input_type
+                    print(next_f, next_input_types)
                     choince_list = []
                     if isinstance(next_input_types, tuple):
                         for next_input_type in next_input_types:
                             if next_input_type in self.TYPE_MASK.keys():
                                 choince_list.append(
-                                    itertools.compress(impl.ACT_SPACE,
-                                                       impl.INPUT_TYPE2MASK[next_input_type]+self.TYPE_MASK[next_input_type]))
-                            else:
-                                choince_list.append(itertools.compress(impl.ACT_SPACE, impl.INPUT_TYPE2MASK[next_input_type]))
-                        products = itertools.product(*choince_list)
+                                    list(itertools.compress(impl.ACT_SPACE, self.TYPE_MASK[next_input_type])))
+                            else:  # LAMBDA F
+                                choince_list.append(list(itertools.compress(impl.ACT_SPACE, impl.INPUT_TYPE2MASK[next_input_type])))
+                        products = list(itertools.product(*choince_list))
                     else:
-                        choince_list.append(itertools.compress(impl.ACT_SPACE, impl.INPUT_TYPE2MASK[next_input_types]))
+                        choince_list.append(list(itertools.compress(impl.ACT_SPACE, self.TYPE_MASK[next_input_types])))
                         products = choince_list
 
                     for args in products:
@@ -373,17 +373,15 @@ def beam_search(examples, T, predictions, gas):
                 count += 1
                 for arg in args:
                     p_f *= predictions[count][impl.TOKEN2INDEX[arg]]
-                p *= p_f**(1.0/len(args+1))
+                p *= p_f**(1.0/(len(args)+1))
             self.p = p
             return p
 
-        def __cmp__(self, other):
-            if self.p < other.p:
-                return -1
-            elif self.p > other.p:
-                return 1
-            else:
-                return 0
+        def __eq__(self, other):
+            return self.p == other.p
+
+        def __lt__(self, other):
+            return self.p < other.p
 
     helper_base = Beamhelper(p_base, 0, 0)
     helpers = [helper_base]
