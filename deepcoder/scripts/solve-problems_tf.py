@@ -55,15 +55,15 @@ def solve_problems(problems, T, mode='dfs', gas=np.inf):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--problemfile', type=str, default='../../dataset/T=2_basic_test_1.json')
+    parser.add_argument('--problemfile', type=str, default='../../dataset/T=2_test.json')
     parser.add_argument('--predictor', type=str, default='True')
     parser.add_argument('--outfile', type=str)
     parser.add_argument('--T', type=int, default=2)
     parser.add_argument('--mode', type=str, 
         choices=['dfs', 'sort-and-add'],
         default='dfs')
-    parser.add_argument('--gas', type=int, default=1500)
-    parser.add_argument('-E', type=int, default=2, help='embedding dimension')
+    parser.add_argument('--gas', type=int, default=1000)
+    parser.add_argument('-E', type=int, default=20, help='embedding dimension')
     parser.add_argument('--nb_inputs', type=int, default=3)
     args = parser.parse_args()
 

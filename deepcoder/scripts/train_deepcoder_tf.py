@@ -5,12 +5,12 @@ from deepcoder.nn.deepcoder_tf import Deepcoder, get_XY
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--infile', type=str, default='../../dataset/T=2_test.json')
+    parser.add_argument('--infile', type=str, default='../../dataset/T=2_train.json')
     parser.add_argument('--outfile', type=str, default="../models/deepcoder/model.ckpt")
-    parser.add_argument('--epochs', type=int, default=10)
+    parser.add_argument('--epochs', type=int, default=20)
     parser.add_argument('--val_split', type=float)
     parser.add_argument('-E', type=int,
-        default=2, help='embedding dimension')
+        default=20, help='embedding dimension')
     parser.add_argument('--nb_inputs', type=int, default=3)
     args = parser.parse_args()
 

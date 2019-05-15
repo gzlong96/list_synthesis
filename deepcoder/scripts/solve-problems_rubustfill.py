@@ -77,7 +77,7 @@ def main():
         choices=['dfs', 'sort-and-add'],
         default='dfs')
     parser.add_argument('--gas', type=int, default=1500)
-    parser.add_argument('-E', type=int, default=2, help='embedding dimension')
+    parser.add_argument('-E', type=int, default=20, help='embedding dimension')
     parser.add_argument('--nb_inputs', type=int, default=3)
     args = parser.parse_args()
 

@@ -177,6 +177,7 @@ class Rubustfill:
     def load(self, outfile="models/deepcoder.ckpt"):
         ckpt = tf.train.get_checkpoint_state("../models/rubustfill/")
         if ckpt and ckpt.model_checkpoint_path:
+            print('load successful')
             self.saver.restore(self.sess, ckpt.model_checkpoint_path)
 
     def predict(self, rows_type, rows_val):
