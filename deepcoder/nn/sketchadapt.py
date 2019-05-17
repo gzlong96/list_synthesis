@@ -281,3 +281,9 @@ class Sketchadapt:
     def predict_sketch(self, rows_type, rows_val):
         pred = self.sess.run(self.sketch_pred, feed_dict={self.type_ph: rows_type, self.val_ph: rows_val})
         return pred
+
+    def predict_args(self, rows_type, rows_val, sketches):
+        pred = self.sess.run(self.r_pred, feed_dict={self.type_ph: rows_type,
+                                                     self.val_ph: rows_val,
+                                                     self.sketch_ph:sketches})
+        return pred

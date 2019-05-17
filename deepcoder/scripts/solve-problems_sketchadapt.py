@@ -21,7 +21,7 @@ def solve_problem(problem, T, mode='dfs', gas=np.inf):
     predictions = problem.get('prediction') # (L2, len(f)+8)
     start = time.time()
 
-    search_func = search.beam_search
+    search_func = search.fill_sketches
 
     solution, steps_used = search_func(examples, T, predictions, gas)
     end = time.time()
@@ -29,42 +29,42 @@ def solve_problem(problem, T, mode='dfs', gas=np.inf):
         solution = solution.prefix
     return solution, end - start, steps_used
 
-def solve_problems(problems, T, mode='dfs', gas=np.inf):
-    rows = []
-    pbar = tqdm.tqdm(total=len(problems))
-    with concurrent.futures.ProcessPoolExecutor() as executor:
-        futs = [executor.submit(solve_problem, problem, T, mode, gas)
-                for problem in problems]
-        for fut, problem in zip(futs, problems):
-            solution, walltime, steps_used = fut.result()
-            rows.append(collections.OrderedDict([
-                ('nb_steps', steps_used),
-                ('wall_ms', walltime * 1000),
-                ('solution', solution),
-                ('reference', problem['program']),
-            ]))
-            pbar.update(1)
-    pbar.close()
-    return rows
-#
 # def solve_problems(problems, T, mode='dfs', gas=np.inf):
 #     rows = []
 #     pbar = tqdm.tqdm(total=len(problems))
-#     futs = []
-#     for problem in problems:
-#         a,b,c = solve_problem(problem, T, mode, gas)
-#         futs.append([a,b,c])
-#     for fut, problem in zip(futs, problems):
-#         solution, walltime, steps_used = fut
-#         rows.append(collections.OrderedDict([
-#             ('nb_steps', steps_used),
-#             ('wall_ms', walltime * 1000),
-#             ('solution', solution),
-#             ('reference', problem['program']),
-#         ]))
-#         pbar.update(1)
+#     with concurrent.futures.ProcessPoolExecutor() as executor:
+#         futs = [executor.submit(solve_problem, problem, T, mode, gas)
+#                 for problem in problems]
+#         for fut, problem in zip(futs, problems):
+#             solution, walltime, steps_used = fut.result()
+#             rows.append(collections.OrderedDict([
+#                 ('nb_steps', steps_used),
+#                 ('wall_ms', walltime * 1000),
+#                 ('solution', solution),
+#                 ('reference', problem['program']),
+#             ]))
+#             pbar.update(1)
 #     pbar.close()
 #     return rows
+#
+def solve_problems(problems, T, mode='dfs', gas=np.inf):
+    rows = []
+    pbar = tqdm.tqdm(total=len(problems))
+    futs = []
+    for problem in problems:
+        a,b,c = solve_problem(problem, T, mode, gas)
+        futs.append([a,b,c])
+    for fut, problem in zip(futs, problems):
+        solution, walltime, steps_used = fut
+        rows.append(collections.OrderedDict([
+            ('nb_steps', steps_used),
+            ('wall_ms', walltime * 1000),
+            ('solution', solution),
+            ('reference', problem['program']),
+        ]))
+        pbar.update(1)
+    pbar.close()
+    return rows
 
 
 def main():
@@ -90,9 +90,16 @@ def main():
         predictor.load()
         rows_type, rows_val, y = sketchadapt.get_XY(problems, args.nb_inputs, max_token_length)
         sketch_pred = predictor.predict_sketch(rows_type, rows_val)
-        fs = search.beam_search_sketcher(sketch_pred, int(max_token_length/5), args.gas**0.4)
 
-        # TODO fill the functions
+        nb_beam = int(args.gas**0.4)
+
+        fs = search.beam_search_sketcher(sketch_pred, int(max_token_length/5), nb_beam)  # [batch, nb_beam, 15]
+
+        arg_pred_list = []  # [nb_beam, batch, 27]
+        for i in range(nb_beam):
+            arg_pred_list.append(predictor.predict_args(rows_type, rows_val, fs[:, i, :]))
+
+        predictions = list(zip(fs, np.stack(arg_pred_list, axis=1)))
 
         for problem, pred in zip(problems, predictions):
             problem['prediction'] = pred

@@ -416,9 +416,10 @@ def beam_search(examples, T, predictions, gas):
 
 def beam_search_sketcher(sketch_pred, T, nb_beam):
     class SketchBeamhelper:
-        def __init__(self, f_list):
+        def __init__(self, f_list, pred):
             self.f_list = f_list
             self.p = self.calculate_p()
+            self.pred = pred
 
         def next_step(self):
             new_helper_list = []
@@ -430,7 +431,7 @@ def beam_search_sketcher(sketch_pred, T, nb_beam):
             p = 1.0
             count = 0
             for f_index in self.f_list:
-                p *= sketch_pred[f_index]
+                p *= self.pred[f_index]
             self.p = p
             return p
 
@@ -440,12 +441,80 @@ def beam_search_sketcher(sketch_pred, T, nb_beam):
         def __lt__(self, other):
             return self.p < other.p
 
-    helpers = [SketchBeamhelper([i]) for i in range(15)]
-    new_helpers = []
-    for i in range(T-1):
-        for h in helpers:
-            new_helpers += h.next_step()
-        sorted(new_helpers, reverse=True)
-        helpers = new_helpers[:nb_beam]
-    fs = [h.f_list for h in helpers]
-    return fs
+    batch_fs = []
+    for i in range(len(sketch_pred)):
+        helpers = [SketchBeamhelper([j], sketch_pred[j]) for j in range(15)]
+        for k in range(T-1):
+            new_helpers = []
+            for h in helpers:
+                new_helpers += h.next_step()
+            sorted(new_helpers, reverse=True)
+            helpers = new_helpers[:nb_beam]
+        batch_fs += [h.f_list for h in helpers]
+    return batch_fs
+
+
+def fill_sketches(examples, T, predictions, gas):
+    ns = {'nb_steps': 0,
+          'solution': None,
+          'gas': gas}
+
+    for f, arg_pred in predictions:
+        input_types = [x.type for x in examples[0][0]]
+        input_type_to_inputs = collections.defaultdict(list)
+        for i, input_type in enumerate(input_types):
+            input_type_to_inputs[input_type].append(i)
+        p_base = Program(input_types, tuple())
+
+        def dfshelper(p_base, t):
+            ns['nb_steps'] += 1
+            ns['gas'] -= 1
+            try:
+                if is_solution(p_base, examples):
+                    ns['solution'] = p_base
+                    return True
+            except (NullInputError, OutputOutOfRangeError):
+                # throw out programs that have null inputs or any out of range output
+                # null outputs ok if unused
+                return
+
+            if ns['gas'] <= 0:
+                return True
+
+            if t == T:
+                return
+
+            # type -> list of input indices / Functions
+            type_to_inputs = collections.defaultdict(list)
+            for k, v in input_type_to_inputs.items():
+                type_to_inputs[k] += v
+
+            used = set()
+            for i, stmt in enumerate(p_base.stmts):
+                program = Program(p_base.input_types, p_base.stmts[:i + 1])
+                used.add(stmt)
+                # favor more recent statements
+                output_type = stmt[0].output_type
+                type_to_inputs[output_type].insert(0, (len(p_base.input_types) + i))
+
+            for k, v in ctx.typemap.items():
+                type_to_inputs[k] += v
+
+            for f in ctx.functions:
+                for args in iterate_inputs(f, type_to_inputs):
+                    stmt = (f, args)
+                    if stmt in used:
+                        continue
+                    program = Program(p_base.input_types, list(p_base.stmts) + [stmt])
+
+                    try:
+                        if t + 1 < T and has_null(program, examples):
+                            continue
+                    except OutputOutOfRangeError:
+                        continue
+
+                    if dfshelper(program, t + 1):
+                        return True
+
+        dfshelper(p_base, 0)
+        return ns['solution'], ns['nb_steps']
