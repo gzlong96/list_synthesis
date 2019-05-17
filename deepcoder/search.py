@@ -412,3 +412,40 @@ def beam_search(examples, T, predictions, gas):
                 break
 
     return ns['solution'], ns['nb_steps']
+
+
+def beam_search_sketcher(sketch_pred, T, nb_beam):
+    class SketchBeamhelper:
+        def __init__(self, f_list):
+            self.f_list = f_list
+            self.p = self.calculate_p()
+
+        def next_step(self):
+            new_helper_list = []
+            for i in range(15):
+                new_helper_list.append(self.f_list + [i])
+            return new_helper_list
+
+        def calculate_p(self):
+            p = 1.0
+            count = 0
+            for f_index in self.f_list:
+                p *= sketch_pred[f_index]
+            self.p = p
+            return p
+
+        def __eq__(self, other):
+            return self.p == other.p
+
+        def __lt__(self, other):
+            return self.p < other.p
+
+    helpers = [SketchBeamhelper([i]) for i in range(15)]
+    new_helpers = []
+    for i in range(T-1):
+        for h in helpers:
+            new_helpers += h.next_step()
+        sorted(new_helpers, reverse=True)
+        helpers = new_helpers[:nb_beam]
+    fs = [h.f_list for h in helpers]
+    return fs

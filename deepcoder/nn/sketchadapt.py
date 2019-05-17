@@ -278,6 +278,6 @@ class Sketchadapt:
             print('load successful')
             self.saver.restore(self.sess, ckpt.model_checkpoint_path)
 
-    def predict(self, rows_type, rows_val):
-        pred = self.sess.run(self.pred, feed_dict={self.type_ph: rows_type, self.val_ph: rows_val})
+    def predict_sketch(self, rows_type, rows_val):
+        pred = self.sess.run(self.sketch_pred, feed_dict={self.type_ph: rows_type, self.val_ph: rows_val})
         return pred
