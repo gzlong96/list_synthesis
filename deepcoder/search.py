@@ -409,7 +409,7 @@ def beam_search(examples, T, predictions, gas):
         for h in helpers:
             # print(h.p_base)
             if h.check():
-                break
+                return ns['solution'], ns['nb_steps']
 
     return ns['solution'], ns['nb_steps']
 
@@ -418,20 +418,19 @@ def beam_search_sketcher(sketch_pred, T, nb_beam):
     class SketchBeamhelper:
         def __init__(self, f_list, pred):
             self.f_list = f_list
-            self.p = self.calculate_p()
             self.pred = pred
+            self.p = self.calculate_p()
 
         def next_step(self):
             new_helper_list = []
             for i in range(15):
-                new_helper_list.append(self.f_list + [i])
+                new_helper_list.append(SketchBeamhelper(self.f_list + [i], self.pred))
             return new_helper_list
 
         def calculate_p(self):
             p = 1.0
-            count = 0
-            for f_index in self.f_list:
-                p *= self.pred[f_index]
+            for i, f_index in enumerate(self.f_list):
+                p *= self.pred[i][f_index]
             self.p = p
             return p
 
@@ -442,36 +441,55 @@ def beam_search_sketcher(sketch_pred, T, nb_beam):
             return self.p < other.p
 
     batch_fs = []
-    for i in range(len(sketch_pred)):
-        helpers = [SketchBeamhelper([j], sketch_pred[j]) for j in range(15)]
+    for i in range(len(sketch_pred)):  # batch
+        helpers = [SketchBeamhelper([j], sketch_pred[i]) for j in range(15)]
         for k in range(T-1):
             new_helpers = []
             for h in helpers:
                 new_helpers += h.next_step()
             sorted(new_helpers, reverse=True)
             helpers = new_helpers[:nb_beam]
-        batch_fs += [h.f_list for h in helpers]
+        batch_fs.append([h.f_list for h in helpers])
     return batch_fs
 
 
-def fill_sketches(examples, T, predictions, gas):
+def fill_sketches(examples, T, predictions, gas, nb_beam):
     ns = {'nb_steps': 0,
           'solution': None,
           'gas': gas}
 
-    for f, arg_pred in predictions:
-        input_types = [x.type for x in examples[0][0]]
-        input_type_to_inputs = collections.defaultdict(list)
-        for i, input_type in enumerate(input_types):
-            input_type_to_inputs[input_type].append(i)
-        p_base = Program(input_types, tuple())
+    gas_limit = gas
 
-        def dfshelper(p_base, t):
+    class ArgBeamhelper:
+        def __init__(self, f, args, pred):
+            self.f = f
+            self.args = args
+            self.pred = pred
+            self.p = self.calculate_p()
+
+        def calculate_p(self):
+            p = 1.0
+            for arg in self.args:
+                p *= self.pred[impl.TOKEN2INDEX[arg]-15]
+            return p
+
+        def __eq__(self, other):
+            return self.p == other.p
+
+        def __lt__(self, other):
+            return self.p < other.p
+
+        def check(self):
             ns['nb_steps'] += 1
             ns['gas'] -= 1
+
+            stmts = self.construct_stmts()
+
+            program = Program([x.type for x in examples[0][0]], stmts)
+
             try:
-                if is_solution(p_base, examples):
-                    ns['solution'] = p_base
+                if is_solution(program, examples):
+                    ns['solution'] = program
                     return True
             except (NullInputError, OutputOutOfRangeError):
                 # throw out programs that have null inputs or any out of range output
@@ -481,40 +499,68 @@ def fill_sketches(examples, T, predictions, gas):
             if ns['gas'] <= 0:
                 return True
 
-            if t == T:
-                return
+        def construct_stmts(self):
+            stmts = []
+            arg_pointer = 0
+            for i, f in enumerate(self.f):
+                func = impl.FUNCTIONS[f]
+                next_input_types = func.input_type
+                if isinstance(next_input_types, tuple):
+                    arg = tuple(self.args[arg_pointer: arg_pointer+len(next_input_types)])
+                    arg_pointer += len(next_input_types)
+                else:
+                    arg = tuple([self.args[arg_pointer]])
+                    arg_pointer += 1
+                stmts.append((func, arg))
+            print(stmts)
+            return tuple(stmts)
 
-            # type -> list of input indices / Functions
-            type_to_inputs = collections.defaultdict(list)
-            for k, v in input_type_to_inputs.items():
-                type_to_inputs[k] += v
 
-            used = set()
-            for i, stmt in enumerate(p_base.stmts):
-                program = Program(p_base.input_types, p_base.stmts[:i + 1])
-                used.add(stmt)
-                # favor more recent statements
-                output_type = stmt[0].output_type
-                type_to_inputs[output_type].insert(0, (len(p_base.input_types) + i))
+    for fs, arg_pred in predictions:
+        input_types = [x.type for x in examples[0][0]]
+        input_type_to_inputs = {}
+        input_type_to_inputs['BOOL'] = []
+        input_type_to_inputs['INT'] = []
+        input_type_to_inputs['LIST'] = []
+        for i, input_type in enumerate(input_types):
+            input_type_to_inputs[input_type].append(i)
 
-            for k, v in ctx.typemap.items():
-                type_to_inputs[k] += v
+        # fill one f
+        choice_list = []
+        for i, f in enumerate(fs):
+            # print(i,f, len(input_types))
+            next_input_types = impl.FUNCTIONS[f].input_type
+            if isinstance(next_input_types, tuple):
+                for next_input_type in next_input_types:
+                    if next_input_type in input_type_to_inputs.keys():
+                        choice_list.append(copy.deepcopy(input_type_to_inputs[next_input_type]))
+                    else:  # LAMBDA F
+                        choice_list.append(
+                            list(itertools.compress(impl.ACT_SPACE, impl.INPUT_TYPE2MASK[next_input_type])))
+            else:
+                choice_list.append(copy.deepcopy(input_type_to_inputs[next_input_types]))
 
-            for f in ctx.functions:
-                for args in iterate_inputs(f, type_to_inputs):
-                    stmt = (f, args)
-                    if stmt in used:
-                        continue
-                    program = Program(p_base.input_types, list(p_base.stmts) + [stmt])
+            input_type_to_inputs[impl.FUNCTIONS[f].output_type].append(i+len(input_types))
+        # print(fs,input_type_to_inputs)
+        # print(choice_list)
 
-                    try:
-                        if t + 1 < T and has_null(program, examples):
-                            continue
-                    except OutputOutOfRangeError:
-                        continue
 
-                    if dfshelper(program, t + 1):
-                        return True
+        # check choice list
+        valid = True
+        for c in choice_list:
+            if len(c) == 0:
 
-        dfshelper(p_base, 0)
-        return ns['solution'], ns['nb_steps']
+                valid = False
+                break
+        if not valid:
+            continue
+
+        all_helper = [ArgBeamhelper(fs, arg, arg_pred) for arg in itertools.product(*choice_list)]
+        sorted(all_helper, reverse=True)
+        all_helper = all_helper[:int(gas_limit/nb_beam)]
+        for h in all_helper:
+            if h.check():
+                return ns['solution'], ns['nb_steps']
+
+    return ns['solution'], ns['nb_steps']
+

@@ -117,7 +117,7 @@ LAMBDA_MASK = np.zeros((len(FUNCTIONS)+8))
 LAMBDA_MASK[(len(FUNCTIONS)-len(LAMBDAS)):len(FUNCTIONS)] = 1
 
 ACT_SPACE = FUNCTIONS + [0, 1, 2, 3, 4, 5, 6, 7]
-TOKEN2INDEX = {x:ACT_SPACE.index(x) for x in ACT_SPACE}
+TOKEN2INDEX = {x : ACT_SPACE.index(x) for x in ACT_SPACE}
 
 # print(INPUT_TYPE2MASK)
 
