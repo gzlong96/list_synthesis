@@ -512,7 +512,7 @@ def fill_sketches(examples, T, predictions, gas, nb_beam):
                     arg = tuple([self.args[arg_pointer]])
                     arg_pointer += 1
                 stmts.append((func, arg))
-            print(stmts)
+            # print(stmts)
             return tuple(stmts)
 
 
