@@ -27,7 +27,7 @@ def solve_problem(problem, T, mode='dfs', gas=np.inf):
     elif mode == 'sort-and-add':
         search_func = search.sort_and_add
     else:
-        raise ValueError('invalid search mode {}'.format(mode))
+        search_func = search.beam_search
     solution, steps_used = search_func(examples, T, ctx, gas)
     end = time.time()
     if solution:
@@ -60,8 +60,8 @@ def main():
     parser.add_argument('--outfile', type=str)
     parser.add_argument('--T', type=int, default=2)
     parser.add_argument('--mode', type=str, 
-        choices=['dfs', 'sort-and-add'],
-        default='dfs')
+        choices=['dfs', 'sort-and-add', 'beam'],
+        default='beam')
     parser.add_argument('--gas', type=int, default=1000)
     parser.add_argument('-E', type=int, default=20, help='embedding dimension')
     parser.add_argument('--nb_inputs', type=int, default=3)
@@ -75,8 +75,13 @@ def main():
         predictor.load()
         rows_type, rows_val, y = deepcoder_tf.get_XY(problems, args.nb_inputs)
         predictions = predictor.predict(rows_type, rows_val)
-        for problem, pred in zip(problems, predictions):
-            problem['prediction'] = pred
+        if args.mode == 'beam':
+            max_token_length = util.get_max_token_len(args.problemfile)
+            for problem, pred in zip(problems, predictions):
+                problem['prediction'] = [np.concatenate([pred * 17/21, np.ones([8, ],dtype=np.float32) * 4.0 / 21], axis=-1) for _ in range(max_token_length)]
+        else:
+            for problem, pred in zip(problems, predictions):
+                problem['prediction'] = pred
 
     rows = solve_problems(problems, args.T, args.mode, args.gas)
 
