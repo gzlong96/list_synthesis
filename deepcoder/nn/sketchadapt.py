@@ -21,14 +21,14 @@ L = 20  # length of input
 
 def encode(value, L=L):
     if value.type == LIST:
-        typ = [0, 1]
-        vals = value.val + [constants.NULL - constants.INTMAX] * (L - len(value.val))
+        typ = [[0, 1] for _ in range(len(value.val))] + [[0, 0] for _ in range(L - len(value.val))]
+        vals = value.val + [constants.NULL] * (L - len(value.val))
     elif value.type == INT:
-        typ = [1, 0]
-        vals = [value.val] + [constants.NULL - constants.INTMAX] * (L - 1)
+        typ = [[1, 0]] + [[0, 0] for _ in range(L - 1)]
+        vals = [value.val] + [constants.NULL] * (L - 1)
     elif value == NULLVALUE:
-        typ = [0, 0]
-        vals = [constants.NULL - constants.INTMAX] * L
+        typ = [[0, 0] for _ in range(L)]
+        vals = [constants.NULL] * L
     return np.array(typ), np.array(vals)
 
 
@@ -55,7 +55,7 @@ def encode_program(prefix):
 
 
 def get_row(examples, max_nb_inputs, L=L):
-    row_type = np.zeros((len(examples), max_nb_inputs+1, 2))
+    row_type = np.zeros((len(examples), max_nb_inputs+1, L, 2))
     row_val = np.zeros((len(examples), max_nb_inputs+1, L))
     for i, (inputs, output) in enumerate(examples):
         # one problem [[inputs], output]
@@ -131,14 +131,16 @@ class Sketchadapt:
             M (int): number of examples per program. default 5.
         """
         with tf.variable_scope('generator'):
-            self.type_ph = tf.placeholder(tf.float32, [None, M, I + 1, 2], name='type')
+            self.type_ph = tf.placeholder(tf.float32, [None, M, I + 1, L, 2], name='type')
             self.val_ph = tf.placeholder(tf.int32, [None, M, I + 1, L], name='value')
             self.sketch_ph = tf.placeholder(tf.int32, [None, self.T], name='sketches')
 
-            number_embeddings = tf.get_variable('number_embeddings', [constants.NULL + 1, self.E])
+            number_embeddings = tf.get_variable('number_embeddings', [constants.NULL + constants.INTMAX + 1, self.E])
             embedded_vals = tf.nn.embedding_lookup(number_embeddings, self.val_ph)
 
-            reshaped_vals = tf.reshape(embedded_vals, [-1, (I + 1) * L, E]) # [b*M, (I + 1) * L, E]
+            concated = tf.concat([self.type_ph, embedded_vals], axis=-1)  # [b, M, I+1, L, E+2]
+
+            reshaped_vals = tf.reshape(concated, [-1, (I + 1) * L, E + 2])  # [b*M, (I + 1) * L, E + 2]
 
             with tf.name_scope('io_rnn'):
                 io_cell = tf.nn.rnn_cell.LSTMCell(self.dim, name='cell1')
@@ -168,6 +170,11 @@ class Sketchadapt:
             self.sketch_pred = tf.nn.softmax(pred, axis=-1)
 
         with tf.name_scope('train_loss_g'):
+            # one_hot_sketch_lable = tf.one_hot(self.sketch_ph, 15)
+            # self.g_loss = tf.reduce_mean(tf.reduce_sum(tf.reduce_sum(one_hot_sketch_lable * -tf.log(self.sketch_pred) +
+            #                                                        (1-one_hot_sketch_lable) * -tf.log(1-self.sketch_pred),
+            #                                                        axis=-1)),axis=-1)
+
             self.g_loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(labels=self.sketch_ph, logits=pred))
 
             tf.summary.scalar('g_loss', self.g_loss)
