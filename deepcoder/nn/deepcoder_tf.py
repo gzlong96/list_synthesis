@@ -22,13 +22,13 @@ L = 20  # length of input
 def encode(value, L=L):
     if value.type == LIST:
         typ = [[0, 1] for _ in range(len(value.val))] + [[0, 0] for _ in range(L - len(value.val))]
-        vals = value.val + [constants.NULL - constants.INTMAX] * (L - len(value.val))
+        vals = value.val + [constants.NULL] * (L - len(value.val))
     elif value.type == INT:
         typ = [[1, 0]] + [[0, 0] for _ in range(L - 1)]
-        vals = [value.val] + [constants.NULL - constants.INTMAX] * (L - 1)
+        vals = [value.val] + [constants.NULL] * (L - 1)
     elif value == NULLVALUE:
         typ = [[0, 0] for _ in range(L)]
-        vals = [constants.NULL - constants.INTMAX] * L
+        vals = [constants.NULL] * L
     return np.array(typ), np.array(vals)
 
 def get_row(examples, max_nb_inputs, L=L):
