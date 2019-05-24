@@ -16,7 +16,7 @@ def main():
 
     problems = json.loads(open(args.infile).read())
     rows_type, rows_val, y = get_XY(problems, args.nb_inputs)
-    model = Deepcoder(args.nb_inputs, args.E)
+    model = Deepcoder(args.nb_inputs, args.E, K=256, batch_size=-1)
     model.fit(rows_type, rows_val, y, epochs=args.epochs, validation_split=args.val_split)
     print('saving model to ', args.outfile)
     model.save(args.outfile)

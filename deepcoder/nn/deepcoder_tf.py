@@ -21,18 +21,18 @@ L = 20  # length of input
 
 def encode(value, L=L):
     if value.type == LIST:
-        typ = [0, 1]
+        typ = [[0, 1] for _ in range(len(value.val))] + [[0, 0] for _ in range(L - len(value.val))]
         vals = value.val + [constants.NULL - constants.INTMAX] * (L - len(value.val))
     elif value.type == INT:
-        typ = [1, 0]
+        typ = [[1, 0]] + [[0, 0] for _ in range(L - 1)]
         vals = [value.val] + [constants.NULL - constants.INTMAX] * (L - 1)
     elif value == NULLVALUE:
-        typ = [0, 0]
+        typ = [[0, 0] for _ in range(L)]
         vals = [constants.NULL - constants.INTMAX] * L
     return np.array(typ), np.array(vals)
 
 def get_row(examples, max_nb_inputs, L=L):
-    row_type = np.zeros((len(examples), max_nb_inputs+1, 2))
+    row_type = np.zeros((len(examples), max_nb_inputs+1, L, 2))
     row_val = np.zeros((len(examples), max_nb_inputs+1, L))
     for i, (inputs, output) in enumerate(examples):
         # one problem [[inputs], output]
@@ -104,28 +104,28 @@ class Deepcoder:
             E (int): embedding dimension
             M (int): number of examples per program. default 5.
         """
-        self.type_ph = tf.placeholder(tf.float32, [None, M, I + 1, 2], name='type')
+        self.type_ph = tf.placeholder(tf.float32, [None, M, I + 1, L, 2], name='type')
         self.val_ph = tf.placeholder(tf.int32, [None, M, I + 1, L], name='value')
         self.label_ph = tf.placeholder(tf.float32, [None, len(impl.FUNCTIONS)], name='labels')
 
-        number_embeddings = tf.get_variable('number_embeddings', [constants.NULL + 1, self.E])
-        embedded_vals = tf.nn.embedding_lookup(number_embeddings, self.val_ph)
+        number_embeddings = tf.get_variable('number_embeddings', [constants.NULL + constants.INTMAX + 1, self.E])
+        embedded_vals = tf.nn.embedding_lookup(number_embeddings, self.val_ph)  # [b, M, I+1, L, E]
 
-        reshaped_vals = tf.reshape(embedded_vals, [-1, M, I + 1, L * E])
+        concated = tf.concat([self.type_ph, embedded_vals], axis=-1)  # [b, M, I+1, L, E+2]
 
-        concated = tf.concat([self.type_ph, reshaped_vals], axis=-1)
-
-        flattened = tf.reshape(concated, [-1, M, (I + 1) * (L * E + 2)])
+        flattened = tf.reshape(concated, [-1, M * (I + 1), L * (E + 2)])
         x1 = tf.layers.dense(flattened, self.dim, activation=tf.nn.sigmoid)
         x2 = tf.layers.dense(x1, self.dim, activation=tf.nn.sigmoid)
         x3 = tf.layers.dense(x2, self.dim, activation=tf.nn.sigmoid)
 
         ave = tf.reduce_mean(x3, axis=1)
         pred = tf.layers.dense(ave, len(impl.FUNCTIONS), activation=None)
-        self.pred = tf.nn.sigmoid(pred)
+        self.pred = tf.nn.softmax(pred)
 
         with tf.name_scope('train_loss'):
-            self.loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=self.label_ph, logits=pred))
+            # self.loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=self.label_ph, logits=pred))
+
+            self.loss = tf.reduce_mean(tf.reduce_sum(self.label_ph * -tf.log(self.pred) + (1-self.label_ph) * -tf.log(1-self.pred), axis=-1))
 
             tf.summary.scalar('loss', self.loss)
 
@@ -145,9 +145,9 @@ class Deepcoder:
                 print('loss:', loss)
             else:
                 print('start epochs', i)
-                zipped = zip([rows_type, rows_val, y])
-                random.shuffle(zipped)
-                rows_type, rows_val, y = zipped
+                # zipped = zip([rows_type, rows_val, y])
+                # random.shuffle(zipped)
+                # rows_type, rows_val, y = zipped
                 for j in range(0, len(y), self.batch_size):
                     _, summary, loss = self.sess.run([self.train_op, self.merged, self.loss],
                                                      feed_dict={self.type_ph: rows_type[j:j+self.batch_size],
@@ -156,7 +156,7 @@ class Deepcoder:
                 self.writer.add_summary(summary, i)
                 print('loss:', loss)
 
-    def save(self, outfile="../models/deepcoder/deepcoder.ckpt"):
+    def save(self, outfile="../models/deepcoder/model.ckpt"):
         self.saver.save(self.sess, outfile)
 
     def load(self, outfile="../models/deepcoder/"):
