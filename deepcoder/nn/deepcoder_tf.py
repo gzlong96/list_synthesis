@@ -119,7 +119,7 @@ class Deepcoder:
         x3 = tf.layers.dense(x2, self.dim, activation=tf.nn.sigmoid)
 
         ave = tf.reduce_mean(x3, axis=1)
-        pred = tf.layers.dense(ave, len(impl.FUNCTIONS) + 8, activation=None)
+        pred = tf.layers.dense(ave, len(impl.FUNCTIONS), activation=None)
         self.pred = tf.nn.softmax(pred)
 
         with tf.name_scope('train_loss'):

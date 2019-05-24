@@ -24,11 +24,13 @@ def solve_problem(problem, T, mode='dfs', gas=np.inf):
     start = time.time()
     if mode == 'dfs':
         search_func = search.dfs
+        solution, steps_used = search_func(examples, T, ctx, gas)
     elif mode == 'sort-and-add':
         search_func = search.sort_and_add
+        solution, steps_used = search_func(examples, T, ctx, gas)
     else:
         search_func = search.beam_search
-    solution, steps_used = search_func(examples, T, ctx, gas)
+        solution, steps_used = search_func(examples, T, predictions, gas)
     end = time.time()
     if solution:
         solution = solution.prefix
