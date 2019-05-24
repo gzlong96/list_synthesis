@@ -299,6 +299,7 @@ def beam_search(examples, T, predictions, gas):
           'gas': gas}
 
     nb_beam = int(gas/T)
+    # nb_beam = 10
 
     # init
     input_types = [x.type for x in examples[0][0]]
@@ -311,10 +312,9 @@ def beam_search(examples, T, predictions, gas):
     p_base = Program(input_types, tuple())
 
     class Beamhelper:
-        def __init__(self,p_base, t, pointer):
+        def __init__(self,p_base, t):
             self.p_base = p_base
             self.t = t
-            self.pointer = pointer
             self.p = self.calculate_p()
 
             self.TYPE_MASK = {}
@@ -339,10 +339,10 @@ def beam_search(examples, T, predictions, gas):
                                     list(itertools.compress(impl.ACT_SPACE, self.TYPE_MASK[next_input_type])))
                             else:  # LAMBDA F
                                 choince_list.append(list(itertools.compress(impl.ACT_SPACE, impl.INPUT_TYPE2MASK[next_input_type])))
-                        products = list(itertools.product(*choince_list))
+                        # products = list(itertools.product(*choince_list))
                     else:
                         choince_list.append(list(itertools.compress(impl.ACT_SPACE, self.TYPE_MASK[next_input_types])))
-                        products = choince_list
+                    products = list(itertools.product(*choince_list))
 
                     for args in products:
                         if isinstance(next_f.input_type, tuple):
@@ -354,7 +354,7 @@ def beam_search(examples, T, predictions, gas):
                         stmt = (next_f, args)
                         program = Program(self.p_base.input_types, list(self.p_base.stmts) + [stmt])
                         # print(self.p_base, program)
-                        new_helper_list.append(Beamhelper(program, self.t + 1, self.pointer+len(args)))
+                        new_helper_list.append(Beamhelper(program, self.t + 1))
             return new_helper_list
 
         def check(self):
@@ -376,14 +376,15 @@ def beam_search(examples, T, predictions, gas):
                 return
 
         def calculate_p(self):
-            p = 1.0
+            p = 0.0
             count = 0
             for func, args in self.p_base.stmts:
                 p_f = predictions[count][impl.TOKEN2INDEX[func]]
                 count += 1
                 for arg in args:
                     p_f *= predictions[count][impl.TOKEN2INDEX[arg]]
-                p *= p_f**(1.0/(len(args)+1))
+                    count += 1
+                p += np.log(p_f**(1.0/(len(args)+1)))
             self.p = p
             return p
 
@@ -393,7 +394,7 @@ def beam_search(examples, T, predictions, gas):
         def __lt__(self, other):
             return self.p < other.p
 
-    helper_base = Beamhelper(p_base, 0, 0)
+    helper_base = Beamhelper(p_base, 0)
     helpers = [helper_base]
     for i in range(T):
         # print('i:',i)
@@ -402,12 +403,13 @@ def beam_search(examples, T, predictions, gas):
             new_helpers += h.next_step()
         for h in new_helpers:
             h.calculate_p()
-        sorted(new_helpers, reverse=True)
+        new_helpers = sorted(new_helpers, reverse=True)
         # print(new_helpers[0].p_base, new_helpers[0].p)
         # print(new_helpers[1].p_base, new_helpers[1].p)
         helpers = new_helpers[:nb_beam]
+        # print(1)
         for h in helpers:
-            # print(h.p_base)
+            # print(h.p_base, h.p)
             if h.check():
                 return ns['solution'], ns['nb_steps']
 
@@ -428,9 +430,9 @@ def beam_search_sketcher(sketch_pred, T, nb_beam):
             return new_helper_list
 
         def calculate_p(self):
-            p = 1.0
+            p = 0.0
             for i, f_index in enumerate(self.f_list):
-                p *= self.pred[i][f_index]
+                p += np.log(self.pred[i][f_index])
             self.p = p
             return p
 
@@ -447,7 +449,7 @@ def beam_search_sketcher(sketch_pred, T, nb_beam):
             new_helpers = []
             for h in helpers:
                 new_helpers += h.next_step()
-            sorted(new_helpers, reverse=True)
+            new_helpers = sorted(new_helpers, reverse=True)
             helpers = new_helpers[:nb_beam]
         batch_fs.append([h.f_list for h in helpers])
     return batch_fs
@@ -468,9 +470,9 @@ def fill_sketches(examples, T, predictions, gas, nb_beam):
             self.p = self.calculate_p()
 
         def calculate_p(self):
-            p = 1.0
+            p = 0.0
             for arg in self.args:
-                p *= self.pred[impl.TOKEN2INDEX[arg]-15]
+                p += np.log(self.pred[impl.TOKEN2INDEX[arg]-15])
             return p
 
         def __eq__(self, other):
@@ -513,7 +515,7 @@ def fill_sketches(examples, T, predictions, gas, nb_beam):
                     arg_pointer += 1
                 stmts.append((func, arg))
             # print(stmts)
-            return tuple(stmts)
+            return stmts
 
 
     for fs, arg_pred in predictions:
@@ -549,14 +551,13 @@ def fill_sketches(examples, T, predictions, gas, nb_beam):
         valid = True
         for c in choice_list:
             if len(c) == 0:
-
                 valid = False
                 break
         if not valid:
             continue
 
         all_helper = [ArgBeamhelper(fs, arg, arg_pred) for arg in itertools.product(*choice_list)]
-        sorted(all_helper, reverse=True)
+        all_helper = sorted(all_helper, reverse=True)
         all_helper = all_helper[:int(gas_limit/nb_beam)]
         for h in all_helper:
             if h.check():

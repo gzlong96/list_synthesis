@@ -8,7 +8,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--infile', type=str, default='../../dataset/T=2_train.json')
     parser.add_argument('--outfile', type=str, default="../models/sketchadapt/model.ckpt")
-    parser.add_argument('--epochs', type=int, default=20)
+    parser.add_argument('--epochs', type=int, default=40)
     parser.add_argument('--val_split', type=float)
     parser.add_argument('-E', type=int,
         default=20, help='embedding dimension')

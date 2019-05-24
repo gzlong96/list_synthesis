@@ -209,7 +209,11 @@ class Sketchadapt:
         with tf.name_scope('train_loss_r'):
             # self.r_loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(labels=self.label_ph, logits=pred))
 
-            self.r_loss = -tf.reduce_mean(tf.reduce_prod(self.r_pred*self.selector+tf.ones_like(self.selector)-self.selector,axis=-1))
+            # self.r_loss = -tf.reduce_mean(tf.reduce_prod(self.r_pred*self.selector+tf.ones_like(self.selector)-self.selector,axis=-1))
+
+            self.r_loss = tf.reduce_mean(tf.reduce_sum(self.selector * -tf.log(self.r_pred)
+                                                       + (1-self.selector) * -tf.log(1-self.r_pred), axis=-1))
+
 
             tf.summary.scalar('r_loss', self.r_loss)
 

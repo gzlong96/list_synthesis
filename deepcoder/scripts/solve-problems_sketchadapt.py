@@ -33,7 +33,7 @@ def solve_problems(problems, T, mode='dfs', gas=np.inf, nb_beam=np.inf):
     rows = []
     pbar = tqdm.tqdm(total=len(problems))
     with concurrent.futures.ProcessPoolExecutor() as executor:
-        futs = [executor.submit(solve_problem, problem, T, mode, gas)
+        futs = [executor.submit(solve_problem, problem, T, mode, gas, nb_beam)
                 for problem in problems]
         for fut, problem in zip(futs, problems):
             solution, walltime, steps_used = fut.result()
@@ -76,7 +76,7 @@ def main():
     parser.add_argument('--mode', type=str, 
         choices=['dfs', 'sort-and-add'],
         default='dfs')
-    parser.add_argument('--gas', type=int, default=1500)
+    parser.add_argument('--gas', type=int, default=500)
     parser.add_argument('-E', type=int, default=20, help='embedding dimension')
     parser.add_argument('--nb_inputs', type=int, default=3)
     args = parser.parse_args()
@@ -91,9 +91,10 @@ def main():
     rows_type, rows_val, y = sketchadapt.get_XY(problems, args.nb_inputs, max_token_length)
     sketch_pred = predictor.predict_sketch(rows_type, rows_val)
 
-    nb_beam = int(args.gas**0.4)
-    nb_beam = 200
 
+    nb_beam = int(args.gas**0.4)
+    nb_beam = 250
+    
     fs = search.beam_search_sketcher(sketch_pred, int(max_token_length/5), nb_beam)  # [batch, nb_beam, 15]
 
     arg_pred_list = []  # [nb_beam, batch, 27]

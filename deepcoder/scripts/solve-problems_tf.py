@@ -19,8 +19,9 @@ from deepcoder.dsl.program import Program
 def solve_problem(problem, T, mode='dfs', gas=np.inf):
     examples = [util.decode_example(x) for x in problem['examples']]
     predictions = problem.get('prediction', np.zeros(len(impl.FUNCTIONS)))
-    scores = dict(zip(impl.FUNCTIONS, predictions))
-    ctx = context.Context(scores)
+    if mode!='beam':
+        scores = dict(zip(impl.FUNCTIONS, predictions))
+        ctx = context.Context(scores)
     start = time.time()
     if mode == 'dfs':
         search_func = search.dfs
@@ -64,7 +65,7 @@ def main():
     parser.add_argument('--mode', type=str, 
         choices=['dfs', 'sort-and-add', 'beam'],
         default='beam')
-    parser.add_argument('--gas', type=int, default=1000)
+    parser.add_argument('--gas', type=int, default=1500)
     parser.add_argument('-E', type=int, default=20, help='embedding dimension')
     parser.add_argument('--nb_inputs', type=int, default=3)
     args = parser.parse_args()
@@ -80,7 +81,10 @@ def main():
         if args.mode == 'beam':
             max_token_length = util.get_max_token_len(args.problemfile)
             for problem, pred in zip(problems, predictions):
-                problem['prediction'] = [np.concatenate([pred * 17/21, np.ones([8, ],dtype=np.float32) * 4.0 / 21], axis=-1) for _ in range(max_token_length)]
+                # problem['prediction'] = np.array([np.concatenate([pred * 17/21, np.ones([8, ],dtype=np.float32) * 4.0 / 21], axis=-1) for _ in range(max_token_length)])
+                # print(problem['prediction'])
+                rand = np.random.rand(10,42)
+                problem['prediction'] = np.array([rand[_]/np.sum(rand[_]) for _ in range(10)])
         else:
             for problem, pred in zip(problems, predictions):
                 problem['prediction'] = pred
