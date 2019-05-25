@@ -77,7 +77,7 @@ def main():
         choices=['dfs', 'sort-and-add', 'beam'],
         default='beam')
     parser.add_argument('--gas', type=int, default=500)
-    parser.add_argument('-E', type=int, default=8, help='embedding dimension')
+    parser.add_argument('-E', type=int, default=62, help='embedding dimension')
     parser.add_argument('--nb_inputs', type=int, default=3)
     args = parser.parse_args()
 
@@ -86,7 +86,7 @@ def main():
     if args.predictor:
         # annotate problems with predictions
         max_token_length = util.get_max_token_len(args.problemfile)
-        predictor = transformer_rf.Transfill(args.nb_inputs, args.E, max_token_length, K=128)
+        predictor = transformer_rf.Transfill(args.nb_inputs, args.E, max_token_length, K=64)
         predictor.load()
         rows_type, rows_val, y = transformer_rf.get_XY(problems, args.nb_inputs, max_token_length)
         predictions = predictor.predict(rows_type, rows_val, np.ones_like(y) * (len(impl.ACT_SPACE)-1))

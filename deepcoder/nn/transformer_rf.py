@@ -127,6 +127,7 @@ class Transfill:
         embedded_vals = tf.nn.embedding_lookup(number_embeddings, self.val_ph)
         embedded_program = tf.nn.embedding_lookup(program_embeddings, self.label_ph)
 
+
         concated = tf.concat([self.type_ph, embedded_vals], axis=-1)  # [b, M, I+1, L, E+2]
 
         reshaped_i_vals = tf.reshape(concated[:,:,:I,:,:], [-1, I * L, E + 2]) # [b*M, I * L, E + 2]
@@ -165,7 +166,7 @@ class Transfill:
                                                   num_heads=self.nb_head,
                                                   dropout_rate=0,
                                                   training=True,
-                                                  causality=True,
+                                                  causality=False,
                                                   scope="self_attention")
 
                         # Vanilla attention
@@ -183,7 +184,9 @@ class Transfill:
         with tf.name_scope('program_decoder'):
             with tf.variable_scope("decoder", reuse=tf.AUTO_REUSE):
                 # embedding
-                dec = embedded_program
+                dec = tf.reshape(tf.tile(tf.expand_dims(embedded_program,axis=1), [1, M, 1, 1]), [-1, self.L2, self.dim])
+                # dec = tf.ones_like(tf.reshape(tf.tile(tf.expand_dims(embedded_program, axis=1), [1, M, 1, 1]),
+                #                  [-1, self.L2, self.dim]))
                 # Blocks
                 for i in range(self.nb_tf[1]):
                     with tf.variable_scope("num_blocks_{}".format(i), reuse=tf.AUTO_REUSE):
@@ -209,12 +212,18 @@ class Transfill:
                         ### Feed Forward
                         dec = ff(dec, num_units=[self.dim, self.dim])
 
+        weights = tf.transpose(program_embeddings)  # (d_model, vocab_size)
+        x1 = tf.reshape(dec, [-1, M, self.L2, self.dim])
+        pooled = tf.reshape(tf.layers.max_pooling2d(x1, [M, 1], [1, 1]), [-1, self.L2, self.dim])
 
-        x1 = tf.layers.dense(dec, len(impl.ACT_SPACE), activation=None)
-        x2 = tf.reshape(x1, [-1, M, self.L2, len(impl.ACT_SPACE)])
-        pooled = tf.layers.max_pooling2d(x2, [M, 1], [1,1])
+        pred = tf.einsum('ntd,dk->ntk', pooled, weights)  # (N, T2, vocab_size)
 
-        pred = tf.reshape(pooled, [-1, self.L2, len(impl.ACT_SPACE)])
+
+        # x1 = tf.layers.dense(dec, len(impl.ACT_SPACE), activation=None)
+        # x2 = tf.reshape(x1, [-1, M, self.L2, len(impl.ACT_SPACE)])
+        # pooled = tf.layers.max_pooling2d(x2, [M, 1], [1,1])
+        #
+        # pred = tf.reshape(pooled, [-1, self.L2, len(impl.ACT_SPACE)])
 
         self.pred = tf.nn.softmax(pred, axis=-1)
 
