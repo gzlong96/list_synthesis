@@ -9,6 +9,7 @@ from deepcoder.dsl import constants
 from deepcoder.dsl.types import INT, LIST
 from deepcoder.dsl.value import NULLVALUE
 from deepcoder import util
+from deepcoder.nn.MCTS import *
 
 import tensorflow as tf
 # K = 256  # number of hidden units
@@ -85,8 +86,60 @@ def get_XY(problems, max_nb_inputs, max_nb_tokens):
     # print(y)
     return rows_type, rows_val, y
 
+def get_XY_from_tree(problems, max_nb_inputs, max_nb_tokens, model):
+    y = []
+    rows_type = []
+    rows_val = []
+    # print(problems)
+    for problem in problems:
+        examples = [util.decode_example(x) for x in problem['examples']]
+        # print(examples[0])
+        row_type, row_val = get_row(examples, max_nb_inputs, L)
+        # print(row)
+        f_list = get_program_vec_from_tree(problem['examples'],  max_nb_tokens, model, row_type, row_val)
+        if f_list is not None:
+            y.append(encode_program(f_list, max_nb_tokens))
+            rows_type.append(row_type)
+            rows_val.append(row_val)
 
-class Rubustfill:
+    y = np.array(y)
+    rows_type = np.array(rows_type)
+    rows_val = np.array(rows_val)
+
+    # preprocess
+    rows_val += np.ones_like(rows_val) * constants.INTMAX
+
+    # print(1111, X)
+    # print(rows_val)
+    # print(y)
+    return rows_type, rows_val, y
+
+def get_program_vec_from_tree(examples, max_nb_tokens, model, row_type, row_val):
+    State.MAX_TOKEN_LEN = max_nb_tokens
+    State.num_moves = len(impl.ACT_SPACE)
+    State.EXAMPLES = examples
+    State.MAX_T = int(max_nb_tokens/5)
+
+    Node.MODEL = model
+    Node.TYPE = [row_type]
+    Node.VAL = [row_val]
+
+    input_types = [x.type for x in State.EXAMPLES[0][0]]
+    input_type_to_index = {'INT':[], 'LIST':[]}
+    for i, t in enumerate(input_types):
+        input_type_to_index[t].append(i)
+
+    root = Node(State([], [], input_type_to_index, None, 0), 1)
+    current_node = root
+    for l in range(max_nb_tokens//5):
+        current_node = UCTSEARCH(100 / (l + 1), current_node)
+    # simple ver, only last one
+    if current_node.state.reward()==1:
+        return current_node.state.f_arg_list
+    else:
+        return None
+
+class TreeCoder:
     def __init__(self, I, E, L2, K=256, lr=1e-3, batch_size=-1):
         self.I = I
         self.E = E
