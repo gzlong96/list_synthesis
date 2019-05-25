@@ -76,7 +76,7 @@ def main():
     parser.add_argument('--mode', type=str, 
         choices=['dfs', 'sort-and-add'],
         default='dfs')
-    parser.add_argument('--gas', type=int, default=500)
+    parser.add_argument('--gas', type=int, default=1500)
     parser.add_argument('-E', type=int, default=20, help='embedding dimension')
     parser.add_argument('--nb_inputs', type=int, default=3)
     args = parser.parse_args()
@@ -93,17 +93,19 @@ def main():
 
 
     nb_beam = int(args.gas**0.4)
-    nb_beam = 250
-    
-    fs = search.beam_search_sketcher(sketch_pred, int(max_token_length/5), nb_beam)  # [batch, nb_beam, 15]
+    nb_beam = 50
+
+    fs = search.beam_search_sketcher(sketch_pred, int(max_token_length/5), nb_beam)  # [batch, nb_beam, T]
+
+    print(np.array(fs).shape)
 
     arg_pred_list = []  # [nb_beam, batch, 27]
     for i in range(nb_beam):
         arg_pred_list.append(predictor.predict_args(rows_type, rows_val, np.array(fs)[:, i, :]))
 
     # print(np.array(fs).shape)
-    # print(np.array(arg_pred_list).shape)
-    # print(np.stack(arg_pred_list, axis=1).shape)
+    print(np.array(arg_pred_list).shape)
+    print(np.stack(arg_pred_list, axis=1).shape)
     predictions = list(zip(fs[i], np.stack(arg_pred_list, axis=1)[i]) for i in range(len(fs)))
 
     for problem, pred in zip(problems, predictions):

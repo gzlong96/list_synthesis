@@ -81,11 +81,13 @@ def get_XY(problems, max_nb_inputs, max_nb_tokens):
     rows_val += np.ones_like(rows_val) * constants.INTMAX
 
     # print(1111, X)
+    # print(rows_val)
+    # print(y)
     return rows_type, rows_val, y
 
 
 class Rubustfill:
-    def __init__(self, I, E, L2, K=256, lr=1e-3, batch_size=-1):
+    def __init__(self, I, E, L2, K=256, lr=1e-3, batch_size=-1, attention='A'):
         self.I = I
         self.E = E
         self.L2 = L2  # max length of tokens
@@ -93,6 +95,7 @@ class Rubustfill:
 
         self.lr = lr
         self.batch_size = batch_size
+        self.attention = attention
 
         self.sess = tf.Session()
 
@@ -120,17 +123,107 @@ class Rubustfill:
 
         concated = tf.concat([self.type_ph, embedded_vals], axis=-1)  # [b, M, I+1, L, E+2]
 
-        reshaped_vals = tf.reshape(concated, [-1, (I + 1) * L, E + 2]) # [b*M, (I + 1) * L, E + 2]
+        reshaped_i_vals = tf.reshape(concated[:,:,:I,:,:], [-1, I * L, E + 2]) # [b*M, I * L, E + 2]
+        reshaped_o_vals = tf.reshape(concated[:,:,I:,:,:], [-1, L, E + 2])  # [b*M, L, E + 2]
 
-        with tf.name_scope('io_rnn'):
-            io_cell = tf.nn.rnn_cell.LSTMCell(self.dim, name='cell1')
+        if self.attention is None:
+            with tf.name_scope('i_rnn'):
+                i_cell = tf.nn.rnn_cell.LSTMCell(self.dim, name='cell1')
 
-            x, h = tf.nn.dynamic_rnn(io_cell, reshaped_vals, dtype=tf.float32)
+                x1, h1 = tf.nn.dynamic_rnn(i_cell, reshaped_i_vals, dtype=tf.float32)
 
-        with tf.name_scope('program_rnn'):
-            program_cell = tf.nn.rnn_cell.LSTMCell(self.dim, name='cell2')
+            with tf.name_scope('o_rnn'):
+                o_cell = tf.nn.rnn_cell.LSTMCell(self.dim, name='cell2')
 
-            x_p, h_p = tf.nn.dynamic_rnn(program_cell, tf.tile(x[:,-1:,:],[1,self.L2,1]), dtype=tf.float32) # x_p [b*M, L2, dim]
+                x2, h2 = tf.nn.dynamic_rnn(o_cell, reshaped_o_vals, dtype=tf.float32, initial_state=h1)
+
+            with tf.name_scope('program_rnn'):
+                program_cell = tf.nn.rnn_cell.LSTMCell(self.dim, name='cell3')
+
+                x_p, h_p = tf.nn.dynamic_rnn(program_cell, tf.tile(x2[:,-1:,:],[1,self.L2,1]), dtype=tf.float32) # x_p [b*M, L2, dim]
+        elif self.attention is 'bi':
+            with tf.name_scope('i_rnn'):
+                i_cell1 = tf.nn.rnn_cell.LSTMCell(self.dim, name='cell11')
+                i_cell2 = tf.nn.rnn_cell.LSTMCell(self.dim, name='cell12')
+
+                x11, h11 = tf.nn.dynamic_rnn(i_cell1, reshaped_i_vals, dtype=tf.float32)
+                x12, h12 = tf.nn.dynamic_rnn(i_cell2, tf.reverse(reshaped_i_vals,axis=[1]), dtype=tf.float32)
+
+            with tf.name_scope('o_rnn'):
+                o_cell1 = tf.nn.rnn_cell.LSTMCell(self.dim, name='cell21')
+                o_cell2 = tf.nn.rnn_cell.LSTMCell(self.dim, name='cell22')
+
+                x21, h21 = tf.nn.dynamic_rnn(o_cell1, reshaped_o_vals, dtype=tf.float32, initial_state=h11)
+                x22, h22 = tf.nn.dynamic_rnn(o_cell2, tf.reverse(reshaped_o_vals,axis=[1]), dtype=tf.float32, initial_state=h12)
+
+            with tf.name_scope('program_rnn'):
+                program_cell1 = tf.nn.rnn_cell.LSTMCell(self.dim, name='cell31')
+                program_cell2 = tf.nn.rnn_cell.LSTMCell(self.dim, name='cell32')
+
+                x_p1, h_p1 = tf.nn.dynamic_rnn(program_cell1, tf.tile(x21[:,-1:,:],[1,self.L2,1]), dtype=tf.float32) # x_p [b*M, L2, dim]
+                x_p2, h_p2 = tf.nn.dynamic_rnn(program_cell1, tf.tile(x22[:, -1:, :], [1, self.L2, 1]),
+                                             dtype=tf.float32)  # x_p [b*M, L2, dim]
+                x_p = tf.concat([x_p1, x_p2], axis=-1)
+
+        elif self.attention == 'A':
+            with tf.name_scope('i_rnn'):
+                i_cell = tf.nn.rnn_cell.LSTMCell(self.dim, name='cell1')
+
+                x1, h1 = tf.nn.dynamic_rnn(i_cell, reshaped_i_vals, dtype=tf.float32)
+
+            with tf.name_scope('o_rnn'):
+                o_cell = tf.nn.rnn_cell.LSTMCell(self.dim, name='cell2')
+
+                x2, h2 = self.attention_rnn(o_cell, reshaped_o_vals, x1 ,h1, I*L, L)
+
+            with tf.name_scope('program_rnn'):
+                program_cell = tf.nn.rnn_cell.LSTMCell(self.dim, name='cell3')
+
+                x_p, h_p = self.attention_rnn(program_cell, tf.tile(x2[:, -1:, :], [1, self.L2, 1]), x2, h2, L, self.L2)
+
+        elif self.attention == 'B':
+            with tf.name_scope('i_rnn'):
+                i_cell = tf.nn.rnn_cell.LSTMCell(self.dim, name='cell1')
+
+                x1, h1 = tf.nn.dynamic_rnn(i_cell, reshaped_i_vals, dtype=tf.float32)
+
+            with tf.name_scope('o_rnn'):
+                o_cell = tf.nn.rnn_cell.LSTMCell(self.dim, name='cell2')
+
+                x2, h2 = self.attention_rnn(o_cell, reshaped_o_vals, x1 ,h1, I*L, L)
+
+            with tf.name_scope('program_rnn'):
+                program_cell = tf.nn.rnn_cell.LSTMCell(self.dim, name='cell3')
+
+                x_p, h_p = self.double_attention_rnn(program_cell, tf.tile(x2[:, -1:, :], [1, self.L2, 1]), x1, x2, h2, I*L, L, self.L2)
+
+        elif self.attention is 'C':
+            with tf.name_scope('i_rnn'):
+                i_cell1 = tf.nn.rnn_cell.LSTMCell(self.dim, name='cell11')
+                i_cell2 = tf.nn.rnn_cell.LSTMCell(self.dim, name='cell12')
+
+                x11, h11 = tf.nn.dynamic_rnn(i_cell1, reshaped_i_vals, dtype=tf.float32)
+                x12, h12 = tf.nn.dynamic_rnn(i_cell2, tf.reverse(reshaped_i_vals,axis=[1]), dtype=tf.float32)
+
+            with tf.name_scope('o_rnn'):
+                o_cell1 = tf.nn.rnn_cell.LSTMCell(self.dim, name='cell21')
+                o_cell2 = tf.nn.rnn_cell.LSTMCell(self.dim, name='cell22')
+
+                x21, h21 = self.attention_rnn(o_cell1, reshaped_o_vals, x11, h11, I * L, L)
+                x22, h22 = self.attention_rnn(o_cell2, tf.reverse(reshaped_o_vals,axis=[1]), x12, h12, I * L, L)
+
+
+            with tf.name_scope('program_rnn'):
+                program_cell1 = tf.nn.rnn_cell.LSTMCell(self.dim, name='cell31')
+                program_cell2 = tf.nn.rnn_cell.LSTMCell(self.dim, name='cell32')
+
+                x_p1, h_p1 = self.double_attention_rnn(program_cell1, tf.tile(x21[:, -1:, :], [1, self.L2, 1]), x11, x21, h21,
+                                                     I * L, L, self.L2)
+                x_p2, h_p2 = self.double_attention_rnn(program_cell2, tf.tile(x22[:, -1:, :], [1, self.L2, 1]), x12, x22, h22,
+                                                     I * L, L, self.L2)
+                x_p = tf.concat([x_p1, x_p2], axis=-1)
+
+
 
         x1 = tf.layers.dense(x_p, len(impl.FUNCTIONS) + 8, activation=None)
         x2 = tf.reshape(x1, [-1, M, self.L2, len(impl.FUNCTIONS) + 8])
@@ -187,3 +280,60 @@ class Rubustfill:
     def predict(self, rows_type, rows_val):
         pred = self.sess.run(self.pred, feed_dict={self.type_ph: rows_type, self.val_ph: rows_val})
         return pred
+
+    def attention_rnn(self, cell, x_input, xs1, h0, in_len, out_len):
+        x_list = []
+        # xs1 = [b*M, L2, dim]
+        # h0 = [2, b*M, dim]
+        h = h0
+        for i in range(out_len):
+            q = h[0]
+            # print(q.shape)
+            e = tf.tile(tf.reshape(q, [-1, 1, self.dim]), [1, in_len, 1]) * xs1  # [b*M, in_len, dim]
+            # print(e.shape)
+            a = tf.nn.softmax(tf.reduce_sum(e, axis=-1), axis=-1)  # [b*M, in_len]
+            # print(a.shape)
+            new_x = tf.reshape(tf.matmul(tf.reshape(a, [-1, 1, in_len]), xs1),[-1, self.dim])  # [b*M, dim]
+
+            new_input = tf.concat([new_x, x_input[:, i, :]], axis=-1)
+
+            x, h = cell(new_input, h)
+            # print(x.shape)
+            x_list.append(x)
+            # print(1111)
+
+        # x_list = [out_len, ?, dim]
+        x_out = tf.stack(x_list,axis=1)
+        # print(x_out.shape)
+
+        return x_out, h
+
+    def double_attention_rnn(self, cell, x_input, xs1, xs2, h0, in_len1, in_len2, out_len):
+        x_list = []
+        # xs1 = [b*M, L2, dim]
+        # h0 = [2, b*M, dim]
+        h = h0
+        for i in range(out_len):
+            q = h[0]
+            # print(q.shape)
+            e1 = tf.tile(tf.reshape(q, [-1, 1, self.dim]), [1, in_len1, 1]) * xs1  # [b*M, in_len, dim]
+            e2 = tf.tile(tf.reshape(q, [-1, 1, self.dim]), [1, in_len2, 1]) * xs2  # [b*M, in_len, dim]
+            # print(e.shape)
+            a1 = tf.nn.softmax(tf.reduce_sum(e1, axis=-1), axis=-1)  # [b*M, in_len]
+            a2 = tf.nn.softmax(tf.reduce_sum(e2, axis=-1), axis=-1)  # [b*M, in_len]
+            # print(a.shape)
+            new_x1 = tf.reshape(tf.matmul(tf.reshape(a1, [-1, 1, in_len1]), xs1),[-1, self.dim])  # [b*M, dim]
+            new_x2 = tf.reshape(tf.matmul(tf.reshape(a2, [-1, 1, in_len2]), xs2), [-1, self.dim])  # [b*M, dim]
+
+            new_input = tf.concat([new_x1, new_x2, x_input[:, i, :]], axis=-1)
+
+            x, h = cell(new_input, h)
+            # print(x.shape)
+            x_list.append(x)
+            # print(1111)
+
+        # x_list = [out_len, ?, dim]
+        x_out = tf.stack(x_list,axis=1)
+        # print(x_out.shape)
+
+        return x_out, h

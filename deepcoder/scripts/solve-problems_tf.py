@@ -65,8 +65,8 @@ def main():
     parser.add_argument('--mode', type=str, 
         choices=['dfs', 'sort-and-add', 'beam'],
         default='beam')
-    parser.add_argument('--gas', type=int, default=1500)
-    parser.add_argument('-E', type=int, default=20, help='embedding dimension')
+    parser.add_argument('--gas', type=int, default=1000)
+    parser.add_argument('-E', type=int, default=8, help='embedding dimension')
     parser.add_argument('--nb_inputs', type=int, default=3)
     args = parser.parse_args()
 
@@ -74,7 +74,7 @@ def main():
 
     if args.predictor:
         # annotate problems with predictions
-        predictor = deepcoder_tf.Deepcoder(args.nb_inputs, args.E)
+        predictor = deepcoder_tf.Deepcoder(args.nb_inputs, args.E, K=128)
         predictor.load()
         rows_type, rows_val, y = deepcoder_tf.get_XY(problems, args.nb_inputs)
         predictions = predictor.predict(rows_type, rows_val)

@@ -556,7 +556,7 @@ def fill_sketches(examples, T, predictions, gas, nb_beam):
         if not valid:
             continue
 
-        all_helper = [ArgBeamhelper(fs, arg, arg_pred) for arg in itertools.product(*choice_list)]
+        all_helper = [ArgBeamhelper(fs, arg, arg_pred) for arg in list(itertools.product(*choice_list))]
         all_helper = sorted(all_helper, reverse=True)
         all_helper = all_helper[:int(gas_limit/nb_beam)]
         for h in all_helper:

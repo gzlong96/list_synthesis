@@ -76,8 +76,8 @@ def main():
     parser.add_argument('--mode', type=str, 
         choices=['dfs', 'sort-and-add', 'beam'],
         default='beam')
-    parser.add_argument('--gas', type=int, default=1500)
-    parser.add_argument('-E', type=int, default=20, help='embedding dimension')
+    parser.add_argument('--gas', type=int, default=500)
+    parser.add_argument('-E', type=int, default=8, help='embedding dimension')
     parser.add_argument('--nb_inputs', type=int, default=3)
     args = parser.parse_args()
 
@@ -86,12 +86,13 @@ def main():
     if args.predictor:
         # annotate problems with predictions
         max_token_length = util.get_max_token_len(args.problemfile)
-        predictor = rubustfill.Rubustfill(args.nb_inputs, args.E, max_token_length)
+        predictor = rubustfill.Rubustfill(args.nb_inputs, args.E, max_token_length, K=128, attention='C')
         predictor.load()
         rows_type, rows_val, y = rubustfill.get_XY(problems, args.nb_inputs, max_token_length)
         predictions = predictor.predict(rows_type, rows_val)
         for problem, pred in zip(problems, predictions):
             problem['prediction'] = pred
+            # print(pred)
 
     rows = solve_problems(problems, args.T, args.mode, args.gas)
 
