@@ -86,7 +86,7 @@ def main():
     if args.predictor:
         # annotate problems with predictions
         max_token_length = util.get_max_token_len(args.problemfile)
-        predictor = rubustfill.Rubustfill(args.nb_inputs, args.E, max_token_length, K=128, attention='C')
+        predictor = rubustfill.Rubustfill(args.nb_inputs, args.E, max_token_length, K=128, attention=None)
         predictor.load()
         rows_type, rows_val, y = rubustfill.get_XY(problems, args.nb_inputs, max_token_length)
         predictions = predictor.predict(rows_type, rows_val)

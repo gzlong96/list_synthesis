@@ -10,6 +10,8 @@ from deepcoder.dsl.types import INT, LIST
 from deepcoder.dsl.value import NULLVALUE
 from deepcoder import util
 
+from tqdm import tqdm
+
 import tensorflow as tf
 # K = 256  # number of hidden units
 # M = 5   # number of input-output pairs per program
@@ -247,7 +249,7 @@ class Sketchadapt:
                 # print(*zipped)
                 # random.shuffle(zipped)
                 # rows_type, rows_val, y = zipped
-                for j in range(0, len(arg_y), self.batch_size):
+                for j in tqdm(range(0, len(arg_y), self.batch_size)):
                     _, summary, loss = self.sess.run([self.train_op_r, self.merged_r, self.r_loss],
                                                      feed_dict={self.type_ph: rows_type[j:j+self.batch_size],
                                                                 self.val_ph: rows_val[j:j+self.batch_size],

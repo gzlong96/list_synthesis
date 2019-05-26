@@ -37,7 +37,7 @@ def train():
     problems = json.loads(open(args.infile).read())
     max_token_length = util.get_max_token_len(args.infile)
     model = TreeCoder(args.nb_inputs, args.E, max_token_length, batch_size=64, K=128, lr=5e-4)
-    model.load()
+    # model.load()
 
     rows_type, rows_val, y = get_XY_from_tree(problems, args.nb_inputs, max_token_length, model)
 

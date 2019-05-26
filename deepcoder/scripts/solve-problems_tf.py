@@ -65,7 +65,7 @@ def main():
     parser.add_argument('--mode', type=str, 
         choices=['dfs', 'sort-and-add', 'beam'],
         default='beam')
-    parser.add_argument('--gas', type=int, default=1000)
+    parser.add_argument('--gas', type=int, default=500)
     parser.add_argument('-E', type=int, default=8, help='embedding dimension')
     parser.add_argument('--nb_inputs', type=int, default=3)
     args = parser.parse_args()

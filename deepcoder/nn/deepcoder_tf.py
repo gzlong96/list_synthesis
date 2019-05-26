@@ -3,6 +3,7 @@ import json
 import numpy as np
 import random
 import re
+import tqdm
 
 from deepcoder.dsl import impl
 from deepcoder.dsl import constants
@@ -148,7 +149,7 @@ class Deepcoder:
                 # zipped = zip([rows_type, rows_val, y])
                 # random.shuffle(zipped)
                 # rows_type, rows_val, y = zipped
-                for j in range(0, len(y), self.batch_size):
+                for j in tqdm.tqdm(range(0, len(y), self.batch_size)):
                     _, summary, loss = self.sess.run([self.train_op, self.merged, self.loss],
                                                      feed_dict={self.type_ph: rows_type[j:j+self.batch_size],
                                                                 self.val_ph: rows_val[j:j+self.batch_size],

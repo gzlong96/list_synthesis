@@ -48,6 +48,7 @@ class State():
         self.T = T
 
         self.valid_moves = self.get_valid_moves()
+        # print(self.valid_moves)
         if len(self.valid_moves) == 0:
             self.turn = -1
 
@@ -59,15 +60,15 @@ class State():
 
             new_input_type_to_index = copy.deepcopy(self.input_type_to_index)
             if self.current_output_type is not None:
-                new_input_type_to_index[self.current_output_type].append(self.T+len(State.EXAMPLES[0]))
+                new_input_type_to_index[self.current_output_type].append(self.T+len(State.EXAMPLES[0][0]) + 33)
 
             if isinstance(next_input_types, tuple):
-                next = State(self.f_arg_list + [nextmove], list(next_input_types), new_input_type_to_index, self.T+1, self.turn - 1)
+                next = State(self.f_arg_list + [nextmove], list(next_input_types), new_input_type_to_index, next_f.output_type, self.T+1, self.turn - 1)
             else:
-                next = State(self.f_arg_list + [nextmove], [next_input_types], new_input_type_to_index, self.T + 1,
+                next = State(self.f_arg_list + [nextmove], [next_input_types], new_input_type_to_index, next_f.output_type,self.T + 1,
                              self.turn - 1)
         else:
-            next = State(self.f_arg_list + [nextmove], self.needed_args[1:], self.input_type_to_index, self.T,
+            next = State(self.f_arg_list + [nextmove], self.needed_args[1:], self.input_type_to_index,self.current_output_type, self.T,
                          self.turn - 1)
 
         return next
@@ -84,7 +85,7 @@ class State():
 
 
     def terminal(self):
-        if self.turn <= 0 or self.T == State.MAX_T:
+        if self.turn <= 0 or (self.T == State.MAX_T and len(self.needed_args)==0):
             return True
 
         return False
@@ -104,9 +105,11 @@ class State():
                 stmts[-1][1].append(impl.ACT_SPACE[s])
         program = Program(input_types, stmts)
         try:
+            # print(program)
             if is_solution(program, State.EXAMPLES):
                 return 1
-        except (NullInputError, OutputOutOfRangeError):
+        # except (NullInputError, OutputOutOfRangeError):
+        except:
             # throw out programs that have null inputs or any out of range output
             # null outputs ok if unused
             return 0
@@ -156,6 +159,8 @@ class Node():
         return False
 
     def calculate_next_p(self):
+        # print(Node.TYPE.shape)
+        # print(Node.VAL.shape)
         predictions = Node.MODEL.predict(Node.TYPE, Node.VAL)
         return predictions[0][len(self.state.f_arg_list)]
 
@@ -202,7 +207,7 @@ def EXPAND(node):
 # current this uses the most vanilla MCTS formula it is worth experimenting with THRESHOLD ASCENT (TAGS)
 
 def BESTCHILD(node, scalar):
-    bestscore = 0.0
+    bestscore = -1
     bestchildren = []
     for c in node.children:
         exploit = c.reward / c.visits
@@ -216,6 +221,7 @@ def BESTCHILD(node, scalar):
 
     if len(bestchildren) == 0:
         logger.warning("OOPS: no best child found, probably fatal")
+        print(len(node.children))
 
     return random.choice(bestchildren)
 

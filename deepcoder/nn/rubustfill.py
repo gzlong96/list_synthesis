@@ -3,6 +3,8 @@ import json
 import numpy as np
 import re
 import random
+import time
+from tqdm import tqdm
 
 from deepcoder.dsl import impl
 from deepcoder.dsl import constants
@@ -139,8 +141,14 @@ class Rubustfill:
 
             with tf.name_scope('program_rnn'):
                 program_cell = tf.nn.rnn_cell.LSTMCell(self.dim, name='cell3')
+                x = tf.tile(x2[:,-1:,:],[1,self.L2,1])
 
-                x_p, h_p = tf.nn.dynamic_rnn(program_cell, tf.tile(x2[:,-1:,:],[1,self.L2,1]), dtype=tf.float32) # x_p [b*M, L2, dim]
+                flattend_x = tf.reshape(x, [-1, M, self.L2, self.dim])
+                # x = tf.reduce_mean(flattend_x, axis=1)
+                x = tf.layers.max_pooling2d(flattend_x, [M, 1], [1,1])
+                x = tf.reshape(x, [-1, self.L2, self.dim])
+
+                x_p, h_p = tf.nn.dynamic_rnn(program_cell, x, dtype=tf.float32) # x_p [b*M, L2, dim]
         elif self.attention is 'bi':
             with tf.name_scope('i_rnn'):
                 i_cell1 = tf.nn.rnn_cell.LSTMCell(self.dim, name='cell11')
@@ -226,10 +234,11 @@ class Rubustfill:
 
 
         x1 = tf.layers.dense(x_p, len(impl.FUNCTIONS) + 8, activation=None)
-        x2 = tf.reshape(x1, [-1, M, self.L2, len(impl.FUNCTIONS) + 8])
-        pooled = tf.layers.max_pooling2d(x2, [M, 1], [1,1])
+        # x2 = tf.reshape(x1, [-1, M, self.L2, len(impl.FUNCTIONS) + 8]) # [b, M, L2, 42]
+        # pooled = tf.layers.max_pooling2d(x2, [M, 1], [1,1])
+        # pooled = tf.reduce_mean(x2, axis=1)
 
-        pred = tf.reshape(pooled, [-1, self.L2, len(impl.FUNCTIONS) + 8])
+        pred = tf.reshape(x1, [-1, self.L2, len(impl.FUNCTIONS) + 8])
 
         self.pred = tf.nn.softmax(pred, axis=-1)
 
@@ -247,6 +256,7 @@ class Rubustfill:
 
     def fit(self, rows_type, rows_val, y, epochs, validation_split):
         for i in range(epochs):
+            t1 = time.time()
             if self.batch_size==-1:
                 print('start epochs', i)
                 _, summary, loss = self.sess.run([self.train_op, self.merged, self.loss], feed_dict={self.type_ph: rows_type,
@@ -260,13 +270,13 @@ class Rubustfill:
                 # print(*zipped)
                 # random.shuffle(zipped)
                 # rows_type, rows_val, y = zipped
-                for j in range(0, len(y), self.batch_size):
+                for j in tqdm(range(0, len(y), self.batch_size)):
                     _, summary, loss = self.sess.run([self.train_op, self.merged, self.loss],
                                                      feed_dict={self.type_ph: rows_type[j:j+self.batch_size],
                                                                 self.val_ph: rows_val[j:j+self.batch_size],
                                                                 self.label_ph: y[j:j+self.batch_size]})
                 self.writer.add_summary(summary, i)
-                print('loss:', loss)
+                print('loss:', loss, 'time_used', (time.time()-t1)/60)
 
     def save(self, outfile="../models/rubustfill/model.ckpt"):
         self.saver.save(self.sess, outfile)
